@@ -1,0 +1,3 @@
+[submodule "submodules/integrals"]
+	path = submodules/integrals
+	url = https://github.com/urysegal/integrals.git
