@@ -19,8 +19,8 @@ make && make install
 #Libint2 setup
 
 RUN wget https://github.com/evaleev/libint/archive/refs/tags/v2.7.1.tar.gz && \
-tar -xvzf v2.7.1.tar.gz && dir && cd libint-v2.7.1 && ./autogen.sh && cd ../ && mkdir libint_build && cd libint_build && \
-../libint-v2.7.1/configure && make && make check && make install
+tar -xvzf v2.7.1.tar.gz && cd libint-2.7.1 && ./autogen.sh && cd ../ && mkdir libint_build && cd libint_build && \
+../libint-2.7.1/configure && make && make check && make install
 
 RUN mkdir integrals
 
