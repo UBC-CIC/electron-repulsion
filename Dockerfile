@@ -16,14 +16,18 @@ RUN git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp && mkdir s
 cmake ../aws-sdk-cpp -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local/ -DCMAKE_INSTALL_PREFIX=/usr/local/ -DBUILD_ONLY="s3-crt" && \
 make && make install
 
-#Libint2 setup
+# Libint2 setup
 
 RUN wget https://github.com/evaleev/libint/archive/refs/tags/v2.7.1.tar.gz && \
 tar -xvzf v2.7.1.tar.gz && cd libint-2.7.1 && ./autogen.sh && cd ../ && mkdir libint_build && cd libint_build && \
 ../libint-2.7.1/configure && make && make check && make install
 
+# Integrals setup
+
 RUN mkdir integrals
 
 COPY ./submodules/integrals ./integrals
+
+RUN cd integrals && cmake . && make
 
 
