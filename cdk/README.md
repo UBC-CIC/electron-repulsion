@@ -1,6 +1,6 @@
-# Welcome to your CDK TypeScript project
+# CDK Project for cloud resources of Electron Repulsion
 
-This is a blank project for CDK development with TypeScript.
+Written in Typescript, this project provisions all cloud resources needed for electron-repulsion to work on AWS.
 
 The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
