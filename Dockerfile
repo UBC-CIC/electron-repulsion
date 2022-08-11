@@ -30,4 +30,6 @@ COPY ./submodules/integrals ./integrals
 
 RUN cd integrals && cmake . && make
 
+ENTRYPOINT [ "./integrals/integrals" ]
+
 
