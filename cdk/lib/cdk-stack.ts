@@ -28,7 +28,7 @@ export class CdkStack extends Stack {
     })
 
     cluster.addCapacity('clusterCapacity',{
-      instanceType: new ec2.InstanceType('t3.medium'),
+      instanceType: new ec2.InstanceType('t3.micro'),
       desiredCapacity: 1,
     })
 
