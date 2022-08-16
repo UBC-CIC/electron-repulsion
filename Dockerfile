@@ -30,6 +30,14 @@ COPY ./submodules/integrals ./integrals
 
 RUN cd integrals && cmake . && make
 
-ENTRYPOINT [ "./integrals/integrals" ]
+RUN mkdir ./scripts
+
+# TODO: Move these steps to the top of the file
+
+COPY ./scripts ./scripts
+
+RUN apt-get -y install unzip && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install
+
+ENTRYPOINT [ "./scripts/run_integrals.sh" ]
 
 

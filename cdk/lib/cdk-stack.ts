@@ -5,6 +5,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam'; 
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 
@@ -22,28 +23,41 @@ export class CdkStack extends Stack {
       bucketName: "integrals-bucket"
     });
 
+    const cluster = new ecs.Cluster(this,'integralsCluster',{
+      clusterName: 'Integrals-CDK-Cluster',
+    })
+
+    cluster.addCapacity('clusterCapacity',{
+      instanceType: new ec2.InstanceType('t3.micro'),
+      desiredCapacity: 1,
+    })
+
     const ecsTaskRole = new iam.Role(this, 'ecsTaskRole',{
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Role for ECS Tasks',
       managedPolicies: [
-        ManagedPolicy.fromManagedPolicyArn(this,'ecsPolicy','arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy')
+        ManagedPolicy.fromManagedPolicyArn(this,'ecsTaskPolicy','arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'),
+        ManagedPolicy.fromManagedPolicyArn(this,'ecsBucketPolicy','arn:aws:iam::aws:policy/AmazonS3FullAccess')
       ]
     });
 
     const ecsTask = new ecs.TaskDefinition(this,'ecsTask',{
       compatibility: ecs.Compatibility.FARGATE,
       executionRole: ecsTaskRole,
+      taskRole: ecsTaskRole,
       cpu: '1024',
       memoryMiB: '2048',
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
-      }
+      },
+      family: "IntegralsTaskDefinition"
     });
 
 
     ecsTask.addContainer('container',{
       image: ecs.ContainerImage.fromEcrRepository(repo,'latest'),  
-      containerName: 'integralsExecution'
+      containerName: 'integralsExecution',
+      logging: ecs.LogDrivers.awsLogs({streamPrefix:'electron-repulsion'})
     })
 
     /*
@@ -87,9 +101,5 @@ export class CdkStack extends Stack {
 
     */
 
-    new cdk.CfnOutput(this,'repoName',{
-      value: repo.repositoryUri,
-      description: 'Repository Name'
-    })
   }
 }
