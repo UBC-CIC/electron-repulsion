@@ -18,7 +18,7 @@ class ResourceConfig:
     bucket_uri: str
 
 
-def resolve_resource_config():
+def resolve_resource_config() -> ResourceConfig:
     # Setting up ARNs and Ids of different resources used
     region = boto3.Session().region_name
     account_id = sts.get_caller_identity()['Account']
