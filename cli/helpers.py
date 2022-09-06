@@ -68,6 +68,14 @@ def run_ecs_task(command,s3_path,aws_resources):
                         {
                             'name':'JSON_OUTPUT_PATH',
                             'value':s3_path
+                        },
+                        {
+                            'name':'BATCH_EXECUTE',
+                            'value':'true'
+                        },
+                        {
+                            'name': 'AWS_BATCH_ARRAY_INDEX',
+                            'value': '1'
                         }
                     ] 
                 }

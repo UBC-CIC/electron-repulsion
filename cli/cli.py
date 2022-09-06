@@ -35,16 +35,15 @@ def info(xyz,basis_set):
 @click.option('--basis_set',help="Basis set to be used",required=True)
 @click.option('--jobid',help="Unique Job Id",required=True)
 @click.option('--bucket',help="Bucket to send output to",required=True)
-@click.option('--output_object',help="Object name to write output to",required=True)
-@click.option('--begin',help="Index to begin calculation at",required=True)
-@click.option('--end',help="Index to end calculation at",required=True)
+@click.option('--output_object',help="Object name to write output to",required=False)
+@click.option('--begin',help="Index to begin calculation at",required=False)
+@click.option('--end',help="Index to end calculation at",required=False)
 def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
     click.echo("Getting resources...")
     aws_resources = resolve_resource_config()
     click.echo("Starting task two_electrons_integrals...")
     path = 'two_electrons_integrals/' + jobid + '-tei.json'
-    response = run_ecs_task(
-        [
+    commands = [
             "two_electrons_integrals",
             "--xyz",xyz,
             "--basis_set",basis_set,
@@ -53,7 +52,15 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
             "--output_object",output_object,
             "--begin",begin,
             "--end",end
-        ],
+        ] if output_object else [
+            "two_electrons_integrals",
+            "--xyz",xyz,
+            "--basis_set",basis_set,
+            "--jobid",jobid,
+            "--bucket",bucket
+        ] 
+    response = run_ecs_task(
+        commands,
         aws_resources.bucket_uri + path,
         aws_resources
         )
