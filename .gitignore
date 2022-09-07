@@ -6,3 +6,5 @@
 *.log
 *.tmp
 *.tar
+__pycache__/
+*.pyc
