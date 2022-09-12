@@ -107,7 +107,7 @@ def lambda_handler(event, context):
                 {
                     'n': objDict['basis_set_instance_size'],
                     'commands': commands,
-                    's3_bucket': f"s3://integrals-bucket/two_electrons_integrals/${jobid}_tei.json",
+                    's3_bucket': f"s3://integrals-bucket/two_electrons_integrals/{jobid}_tei.json",
                     'batch_execution': batch_execution,
                     'numSlices': numSlices,
                     'args_path': 's3://integrals-bucket/tei_args/' + jobid

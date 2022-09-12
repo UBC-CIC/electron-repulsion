@@ -77,7 +77,7 @@ def run_ecs_task(command,s3_path,aws_resources):
                             'name': 'AWS_BATCH_ARRAY_INDEX',
                             'value': '1'
                         }
-                    ] 
+                    ]
                 }
             ]
         },
