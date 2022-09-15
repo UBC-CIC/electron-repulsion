@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
 
+from asyncio.windows_events import NULL
+from email.policy import default
 from importlib import resources
 import click
 import uuid
 from helpers import *
+from datetime import datetime
 
 @click.group()
 def cli():
@@ -24,6 +27,7 @@ def info(xyz,basis_set):
         aws_resources.bucket_uri + path,
         aws_resources
         )
+
     click.echo("Started task. Waiting for task to finish...")
     wait_for_task(response["tasks"][0]['taskArn'],aws_resources)
     jsonFile = get_json_from_bucket(path)
@@ -58,7 +62,7 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
             "--basis_set",basis_set,
             "--jobid",jobid,
             "--bucket",bucket
-        ] 
+        ]
     response = run_ecs_task(
         commands,
         aws_resources.bucket_uri + path,
@@ -67,8 +71,94 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
     click.echo("Started task. Waiting for task to finish...")
     wait_for_task(response["tasks"][0]['taskArn'],aws_resources)
     jsonFile = get_json_from_bucket(path)
-    print(jsonFile)     
-    
+    print(jsonFile)
+
+@cli.command()
+@click.option('--xyz',help="URL to xyz file",required=True)
+@click.option('--basis_set',help="Basis set to be used",required=True)
+@click.option('--s3_bucket',help="Path in S3 to store output of the info step",required=True)
+@click.option('--batch_execution',help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
+def execute_state_machine(xyz,basis_set,s3_bucket,batch_execution):
+    click.echo("Getting resources...")
+    aws_resources = resolve_resource_config()
+    click.echo("Starting state machine execution...")
+    inputDict = {
+        "inputs" : {
+            "commands": [
+                "info",
+                "--xyz",
+                xyz,
+                "--basis_set",
+                basis_set
+            ],
+            "s3_bucket": s3_bucket,
+            "batch_execution": batch_execution
+        }
+    }
+    job_id = str(uuid.uuid4())
+    exec_state_machine(input=inputDict,aws_resources=aws_resources,name=job_id)
+    print("Job started successfully!")
+    print(f"Job Id: {job_id}")
+
+@cli.command()
+@click.option('--jobid',help="Id of the job to check status of",required=True)
+def get_status(jobid):
+    click.echo("Getting resources...")
+    aws_resources = resolve_resource_config()
+    response = get_exec_status(jobid=jobid,aws_resources=aws_resources)
+    status = response['status']
+    print(f"Currect Execution Status: {status}")
+    events = response['history']['events']
+
+    # If Execution Succeeeded
+    if status == 'SUCCEEDED':
+        time = events[0]['timestamp']
+        time = time.strftime("%m/%d/%Y %H:%M:%S")
+        print(f"Execution completed successfully at: {time}")
+
+    # If Execution Failed
+    elif status == 'FAILED':
+        print("Failed")
+
+    # If Execution Running
+    elif status == 'RUNNING':
+        lastStateEntered = {}
+        for event in events:
+            if event['type'] == 'TaskStateEntered':
+                lastStateEntered = event
+                break
+        print("Latest/Current Event:-")
+        if len(lastStateEntered) == 0:
+            time = events[(len(events)-1)]['timestamp']
+            time = time.strftime("%m/%d/%Y %H:%M:%S")
+            print(f"Execution started at: {time}")
+        else:
+            time = lastStateEntered['timestamp']
+            time = time.strftime("%m/%d/%Y %H:%M:%S")
+            print(f"{lastStateEntered['stateEnteredEventDetails']['name']} step started at: {time}")
+
+    # If Execution Aborted
+    elif status == 'ABORTED':
+        time = events[0]['timestamp']
+        time = time.strftime("%m/%d/%Y %H:%M:%S")
+        print(f"Job was aborted at: {time}")
+
+
+@cli.command()
+def get_execution_list():
+    click.echo("Getting resources...")
+    aws_resources = resolve_resource_config()
+    # TODO
+
+@cli.command()
+@click.option('--jobid',help="Id of the job to abort",required=True)
+def abort_execution(jobid):
+    click.echo("Getting resources...")
+    aws_resources = resolve_resource_config()
+    abort_exec(jobid=jobid,aws_resources=aws_resources)
+    print(f"Job {jobid} aborted!")
+
+
 
 if __name__ == '__main__':
     cli()
