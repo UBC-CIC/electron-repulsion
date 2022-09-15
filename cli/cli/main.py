@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
-
-
-from importlib import resources
 import click
 import uuid
-from helpers import *
+from cli.helpers import *
 
 @click.group()
 def cli():
@@ -60,8 +56,8 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
     click.echo("Started task. Waiting for task to finish...")
     wait_for_task(response["tasks"][0]['taskArn'],aws_resources)
     jsonFile = get_json_from_bucket(path)
-    print(jsonFile)     
-    
+    print(jsonFile)
+
 
 if __name__ == '__main__':
     cli()
