@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-
 import boto3
 import json
 from dataclasses import dataclass
 from typing import List
+
 ecs = boto3.client('ecs')
 s3 = boto3.client('s3')
 sts = boto3.client('sts')
