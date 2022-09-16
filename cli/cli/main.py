@@ -1,13 +1,12 @@
+
 #!/usr/bin/env python3
 
 
-from asyncio.windows_events import NULL
-from email.policy import default
-from importlib import resources
 import click
 import uuid
 from helpers import *
 from datetime import datetime
+
 
 @click.group()
 def cli():
@@ -161,6 +160,7 @@ def abort_execution(jobid):
     aws_resources = resolve_resource_config()
     abort_exec(jobid=jobid,aws_resources=aws_resources)
     print(f"Job {jobid} aborted!")
+
 
 
 

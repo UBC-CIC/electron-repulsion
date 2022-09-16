@@ -1,6 +1,9 @@
 #!/bin/bash
 
+# Runs the CLI.
+# USE: ./cli.sh --help
+
 set -eu
 
-exec cli/.venv/bin/python cli.py $@
+exec .venv/bin/python3 -m cli $@
 
