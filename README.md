@@ -14,7 +14,31 @@ There are three main components in this library:
 2. AWS CDK definitions in `cdk` for deploying and managing AWS resources
 3. A command line library in `cli` for managing data and process on AWS
 
-## Deploying to AWS
+## Deploying
+
+There are a few automated steps to deploying the solution to your AWS environment
+
+1. Building the `integrals` image
+2. Deploying CDK resources
+3. Pushing the `integrals` image
+
+These instructions require that you are using the `bash` shell in a `POSIX`-compliant environment.
+This means Linux, Mac, or Windows with WSL2. You will need the following programs installed:
+
+* `node` and `npm`
+* `docker`
+* `aws`
+
+These should be readily available from your package manager.
+
+### Building the integrals image
+
+You will need `docker` installed, and you will need the submodule updated as instructed above. Run the
+following command to build and tag the `integrals` image locally:
+
+    ./scripts/build_image.sh
+
+### Deploying CDK resources
 
 We use AWS CDK to manage cloud resources in such a way that we can easily replicate our setup in other
 users' environments. To use our definitions, you will need to install the `cdk` utility, which you can do with
@@ -47,7 +71,16 @@ In the `cdk` directory, you can execute the following commands:
     # Remove all managed resources
     cdk destroy
 
-## Using the command line interface
+### Pushing the integrals image
+
+Now that CDK has initialized all our resources, we need to push the `integrals` image to the ECR repo it has
+created. You can do that with
+
+    ./scripts/build_image.sh
+
+Note that this script assumes the ability to read AWS configuration from environment variables.
+
+## Running with the command line interface
 
 There is a small Python library/application in `cli` that allows you to run and monitor jobs without having
 to know too much about the AWS resources themselves. Its dependencies are managed by `pip`, and you can
