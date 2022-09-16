@@ -78,10 +78,12 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
 @click.option('--basis_set',help="Basis set to be used",required=True)
 @click.option('--s3_bucket',help="Path in S3 to store output of the info step",required=True)
 @click.option('--batch_execution',help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
-def execute_state_machine(xyz,basis_set,s3_bucket,batch_execution):
+@click.option('--num_batch_jobs',help="Number of instances to create for the batch job", required=True)
+def execute_state_machine(xyz,basis_set,s3_bucket,batch_execution,num_batch_jobs):
     click.echo("Getting resources...")
     aws_resources = resolve_resource_config()
     click.echo("Starting state machine execution...")
+    job_id = str(uuid.uuid4())
     inputDict = {
         "inputs" : {
             "commands": [
@@ -92,10 +94,11 @@ def execute_state_machine(xyz,basis_set,s3_bucket,batch_execution):
                 basis_set
             ],
             "s3_bucket": s3_bucket,
-            "batch_execution": batch_execution
+            "batch_execution": batch_execution,
+            "num_batch_jobs": num_batch_jobs,
+            "jobid": job_id
         }
     }
-    job_id = str(uuid.uuid4())
     exec_state_machine(input=inputDict,aws_resources=aws_resources,name=job_id)
     print("Job started successfully!")
     print(f"Job Id: {job_id}")
@@ -119,6 +122,7 @@ def get_status(jobid):
     # If Execution Failed
     elif status == 'FAILED':
         print("Failed")
+        # TODO
 
     # If Execution Running
     elif status == 'RUNNING':

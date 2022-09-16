@@ -102,7 +102,8 @@ export class CdkStack extends Stack {
         }
       ],
       integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-      assignPublicIp: true
+      assignPublicIp: true,
+      resultPath: "$.output"
     });
 
     const readInfoS3Role = new iam.Role(this,'readInfoS3Role',{

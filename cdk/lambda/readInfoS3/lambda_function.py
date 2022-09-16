@@ -70,32 +70,32 @@ def writeArgsToS3(n,jobid,numSlices):
     return True
 
 def lambda_handler(event, context):
-    file_location = event['Overrides']['ContainerOverrides'][0]['Environment'][0]['Value'].replace('s3://integrals-bucket/','')
-    numSlices = 6   # Change numSlices here
+    file_location = event['inputs']['s3_bucket'].replace('s3://integrals-bucket/','')
+    numSlices = int(event['inputs']['num_batch_jobs'])
     obj = s3.get_object(
         Bucket='integrals-bucket',
         Key=file_location
     )
     objDict = json.loads(obj['Body'].read())
-    jobid = 'randomPlaceholder' # Put jobid here
+    jobid = event['inputs']['jobid']
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
-        batch_execution = event['Overrides']['ContainerOverrides'][0]['Environment'][1]['Value']
+        batch_execution = event['inputs']['batch_execution']
         commands = []
         if batch_execution == "true":
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
                         '--bucket','integrals-bucket'
                         ]
         else:
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
                         '--begin', '0,0,0,0',
                         '--end', f"{objDict['basis_set_instance_size']},0,0,0",
                         '--bucket','integrals-bucket',
@@ -118,5 +118,3 @@ def lambda_handler(event, context):
             'statusCode': 400,
             'body': 'Something went wrong...'
         }
-
-
