@@ -21,7 +21,8 @@ export class CdkStack extends Stack {
     // The code that defines your stack goes here
 
     const repo = new ecr.Repository(this,"repository",{
-      encryption: ecr.RepositoryEncryption.KMS
+      encryption: ecr.RepositoryEncryption.KMS,
+      repositoryName: 'integrals-repo'
     });
 
     const bucket = new s3.Bucket(this,"S3Bucket",{
