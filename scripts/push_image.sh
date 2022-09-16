@@ -5,21 +5,21 @@
 
 set -eux
 
-# TODO(ejconlon) Use the correct name here
 NAME="integrals-repo"
-TAG="latest"
 
 AWS_CMD="aws"
-if [[ ! -z "${AWS_PROFILE}" ]]; then
+if [[ ! -z "${AWS_PROFILE:-}" ]]; then
   AWS_CMD="aws --profile ${AWS_PROFILE}"
 fi
 
 REPO="$(${AWS_CMD} ecr describe-repositories --repository-names ${NAME} --output text --query repositories[0].repositoryUri)"
 
+set +x
+
 PASSWORD="$(${AWS_CMD} ecr get-login-password)"
 
 docker login --username AWS --password ${PASSWORD} ${REPO}
 
-docker tag ${TAG} ${REPO}
+set -x
 
 docker push ${REPO}
