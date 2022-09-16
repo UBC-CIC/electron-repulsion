@@ -7,6 +7,7 @@ ecs = boto3.client('ecs')
 s3 = boto3.client('s3')
 sts = boto3.client('sts')
 ec2 = boto3.client('ec2')
+sfn = boto3.client('stepfunctions')
 
 # Class to keep track of AWS resources
 @dataclass
@@ -15,6 +16,8 @@ class ResourceConfig:
     cluster_arn: str
     task_arn: str
     bucket_uri: str
+    sfn_arn: str
+    exec_arn: str
 
 
 def resolve_resource_config() -> ResourceConfig:
@@ -40,7 +43,9 @@ def resolve_resource_config() -> ResourceConfig:
         [subnets['Subnets'][0]['SubnetId'],subnets['Subnets'][1]['SubnetId']],
         f"arn:aws:ecs:{region}:{account_id}:cluster/Integrals-CDK-Cluster",
         f"arn:aws:ecs:{region}:{account_id}:task-definition/IntegralsTaskDefinition",
-        's3://integrals-bucket/'
+        's3://integrals-bucket/',
+        f"arn:aws:states:{region}:{account_id}:stateMachine:IntegralsStateMachine",
+        f"arn:aws:states:{region}:{account_id}:execution:IntegralsStateMachine"
     )
 
 # Runs the ECS task with the given commands and S3 destination
@@ -67,8 +72,16 @@ def run_ecs_task(command,s3_path,aws_resources):
                         {
                             'name':'JSON_OUTPUT_PATH',
                             'value':s3_path
+                        },
+                        {
+                            'name':'BATCH_EXECUTE',
+                            'value':'true'
+                        },
+                        {
+                            'name': 'AWS_BATCH_ARRAY_INDEX',
+                            'value': '1'
                         }
-                    ] 
+                    ]
                 }
             ]
         },
@@ -81,6 +94,36 @@ def run_ecs_task(command,s3_path,aws_resources):
 def wait_for_task(arn,aws_resources):
     waiter = ecs.get_waiter('tasks_stopped')
     waiter.wait(cluster=aws_resources.cluster_arn, tasks=[arn])
+
+# State machine execution
+
+def exec_state_machine(input,aws_resources,name):
+    response = sfn.start_execution(
+        input=json.dumps(input),
+        stateMachineArn=aws_resources.sfn_arn,
+        name=name
+    )
+    return response
+
+# Get State Machine Execution Status
+
+def get_exec_status(jobid,aws_resources):
+    execution_arn = f"{aws_resources.exec_arn}:{jobid}"
+    status = sfn.describe_execution(executionArn=execution_arn)['status']
+    exec_history = sfn.get_execution_history(
+        executionArn=execution_arn,
+        reverseOrder=True,
+        includeExecutionData=True
+        )
+    return {
+        'status': status,
+        'history': exec_history
+    }
+
+# Abort state machine execution
+def abort_exec(jobid,aws_resources):
+    execution_arn = f"{aws_resources.exec_arn}:{jobid}"
+    sfn.stop_execution(executionArn=execution_arn)
 
 # Gets JSON from bucket at the location specified by key
 def get_json_from_bucket(key):
