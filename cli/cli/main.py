@@ -151,7 +151,9 @@ def get_status(jobid):
 def get_execution_list():
     click.echo("Getting resources...")
     aws_resources = resolve_resource_config()
-    # TODO
+    executions = list_execs(aws_resources=aws_resources)
+    for exec in executions:
+        print(f"{exec['executionArn'].split(':')[-1]} - {exec['status']}")
 
 @cli.command()
 @click.option('--jobid',help="Id of the job to abort",required=True)
