@@ -100,10 +100,6 @@ export class CdkStack extends Stack {
             {
               name: 'JSON_OUTPUT_PATH',
               value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
-            },
-            {
-              name: 'BATCH_EXECUTION',
-              value: sfn.JsonPath.stringAt('$.inputs.batch_execution')
             }
           ]
         }
@@ -139,7 +135,7 @@ export class CdkStack extends Stack {
       timeout: cdk.Duration.seconds(20),
       memorySize: 256,
       environment: {
-        "s3_bucket": bucketName.valueAsString
+        "ER_S3_BUCKET": bucketName.valueAsString
       }
     });
 
@@ -266,11 +262,11 @@ export class CdkStack extends Stack {
     const stepFuncDefinition = integralsInfoStep
                                .next(readInfoS3Step)
                                .next(new sfn.Choice(this,"batchExec")
-                                  // Batch Execution False
-                                  .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
+                                  // No batch execution
+                                  .when(sfn.Condition.numberGreaterThan("$.inputs.numSlices",1),
                                     batchSubmitJobTask
                                   )
-                                  // Batch Execution True
+                                  // Batch execution
                                   .otherwise(integralsTwoElectronsIntegralsSeqStep)
                                );
 

@@ -3,7 +3,7 @@ import boto3
 import os
 
 s3 = boto3.client('s3')
-bucket_name = os.environ['s3_bucket']
+bucket_name = os.environ['ER_S3_BUCKET']
 
 def get_basis_set(cmds):
     for i in range(len(cmds)):
@@ -63,12 +63,8 @@ def writeArgsToS3(n,jobid,numSlices):
     with open('/tmp/' + fileNameBatch, 'w+') as file:
         file.write(batch_args)
         file.close()
-    try:
-        s3.upload_file('/tmp/'+ fileNameSeq, bucket_name, f"tei_args/{jobid}/{fileNameSeq}");
-        s3.upload_file('/tmp/'+ fileNameBatch, bucket_name, f"tei_args/{jobid}/{fileNameBatch}")
-    except Exception as e:
-        print(e)
-        return False
+    s3.upload_file('/tmp/'+ fileNameSeq, bucket_name, f"tei_args/{jobid}/{fileNameSeq}")
+    s3.upload_file('/tmp/'+ fileNameBatch, bucket_name, f"tei_args/{jobid}/{fileNameBatch}")
     return True
 
 def lambda_handler(event, context):
@@ -82,9 +78,8 @@ def lambda_handler(event, context):
     jobid = event['inputs']['jobid']
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
-        batch_execution = event['inputs']['batch_execution']
         commands = []
-        if batch_execution == "true":
+        if numSlices > 1:
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -110,7 +105,6 @@ def lambda_handler(event, context):
                     'n': objDict['basis_set_instance_size'],
                     'commands': commands,
                     's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
-                    'batch_execution': batch_execution,
                     'numSlices': numSlices,
                     'args_path': f"s3://{bucket_name}/tei_args/{jobid}"
                 }
