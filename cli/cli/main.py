@@ -76,8 +76,10 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
 @click.option('--xyz',help="URL to xyz file",required=True)
 @click.option('--basis_set',help="Basis set to be used",required=True)
 @click.option('--s3_bucket',help="Path in S3 to store output of the info step",required=True)
-@click.option('--num_batch_jobs',help="Number of instances to create for the batch job", default=1)
-def execute_state_machine(xyz,basis_set,s3_bucket,num_batch_jobs):
+@click.option('--num_parts',help="Number of parts to divide the two_electrons_integrals step into", default=1)
+@click.option('--max_batch_jobs',help="Maximum number of AWS Batch jobs running at any given time") # TBD
+@click.option('--batch_execution',help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
+def execute_state_machine(xyz,basis_set,s3_bucket,num_parts,max_batch_jobs,batch_execution):
     click.echo("Getting resources...")
     aws_resources = resolve_resource_config()
     click.echo("Starting state machine execution...")
@@ -92,8 +94,10 @@ def execute_state_machine(xyz,basis_set,s3_bucket,num_batch_jobs):
                 basis_set
             ],
             "s3_bucket": s3_bucket,
-            "num_batch_jobs": num_batch_jobs,
-            "jobid": job_id
+            "num_batch_jobs": num_parts,
+            "jobid": job_id,
+            "max_batch_jobs": max_batch_jobs,
+            "batch_execution": batch_execution
         }
     }
     exec_state_machine(input=inputDict,aws_resources=aws_resources,name=job_id)

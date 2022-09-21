@@ -207,7 +207,7 @@ export class CdkStack extends Stack {
       computeResources: {
         type: 'SPOT',
         spotIamFleetRole: spotFleetRole.roleArn,
-        maxvCpus: 256,
+        maxvCpus: 16,
         minvCpus: 0,
         instanceRole: EcsInstanceProfile.attrArn,
         instanceTypes: ['optimal'],
