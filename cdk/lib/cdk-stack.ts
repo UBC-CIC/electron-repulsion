@@ -263,7 +263,7 @@ export class CdkStack extends Stack {
                                .next(readInfoS3Step)
                                .next(new sfn.Choice(this,"batchExec")
                                   // No batch execution
-                                  .when(sfn.Condition.numberGreaterThan("$.inputs.numSlices",1),
+                                  .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
                                     batchSubmitJobTask
                                   )
                                   // Batch execution
