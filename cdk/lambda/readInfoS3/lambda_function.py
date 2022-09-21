@@ -70,6 +70,7 @@ def writeArgsToS3(n,jobid,numSlices):
 def lambda_handler(event, context):
     file_location = event['inputs']['s3_bucket'].replace(f"s3://{bucket_name}/",'')
     numSlices = int(event['inputs']['num_batch_jobs'])
+    batch_execution = event['inputs']['batch_execution']
     obj = s3.get_object(
         Bucket=bucket_name,
         Key=file_location
@@ -79,7 +80,7 @@ def lambda_handler(event, context):
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
-        if numSlices > 1:
+        if batch_execution == "true":
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -106,7 +107,8 @@ def lambda_handler(event, context):
                     'commands': commands,
                     's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
                     'numSlices': numSlices,
-                    'args_path': f"s3://{bucket_name}/tei_args/{jobid}"
+                    'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
+                    'batch_execution': batch_execution
                 }
         }
     else:
