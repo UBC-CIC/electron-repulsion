@@ -1,7 +1,9 @@
 import json
 import boto3
+import os
 
 s3 = boto3.client('s3')
+bucket_name = os.environ['ER_S3_BUCKET']
 
 def get_basis_set(cmds):
     for i in range(len(cmds)):
@@ -61,26 +63,22 @@ def writeArgsToS3(n,jobid,numSlices):
     with open('/tmp/' + fileNameBatch, 'w+') as file:
         file.write(batch_args)
         file.close()
-    try:
-        s3.upload_file('/tmp/'+ fileNameSeq, 'integrals-bucket', f"tei_args/{jobid}/{fileNameSeq}");
-        s3.upload_file('/tmp/'+ fileNameBatch, 'integrals-bucket', f"tei_args/{jobid}/{fileNameBatch}")
-    except Exception as e:
-        print(e)
-        return False
+    s3.upload_file('/tmp/'+ fileNameSeq, bucket_name, f"tei_args/{jobid}/{fileNameSeq}")
+    s3.upload_file('/tmp/'+ fileNameBatch, bucket_name, f"tei_args/{jobid}/{fileNameBatch}")
     return True
 
 def lambda_handler(event, context):
-    file_location = event['inputs']['s3_bucket'].replace('s3://integrals-bucket/','')
+    file_location = event['inputs']['s3_bucket'].replace(f"s3://{bucket_name}/",'')
     numSlices = int(event['inputs']['num_batch_jobs'])
+    batch_execution = event['inputs']['batch_execution']
     obj = s3.get_object(
-        Bucket='integrals-bucket',
+        Bucket=bucket_name,
         Key=file_location
     )
     objDict = json.loads(obj['Body'].read())
     jobid = event['inputs']['jobid']
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
-        batch_execution = event['inputs']['batch_execution']
         commands = []
         if batch_execution == "true":
             commands = [
@@ -88,7 +86,7 @@ def lambda_handler(event, context):
                         '--jobid', jobid,
                         '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
                         '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--bucket','integrals-bucket'
+                        '--bucket',bucket_name
                         ]
         else:
             commands = [
@@ -98,7 +96,7 @@ def lambda_handler(event, context):
                         '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
                         '--begin', '0,0,0,0',
                         '--end', f"{objDict['basis_set_instance_size']},0,0,0",
-                        '--bucket','integrals-bucket',
+                        '--bucket',bucket_name,
                         '--output_object',f"{jobid}-integrals.bin"
                         ]
         return {
@@ -107,10 +105,10 @@ def lambda_handler(event, context):
                 {
                     'n': objDict['basis_set_instance_size'],
                     'commands': commands,
-                    's3_bucket': f"s3://integrals-bucket/two_electrons_integrals/{jobid}_tei.json",
-                    'batch_execution': batch_execution,
+                    's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
                     'numSlices': numSlices,
-                    'args_path': 's3://integrals-bucket/tei_args/' + jobid
+                    'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
+                    'batch_execution': batch_execution
                 }
         }
     else:

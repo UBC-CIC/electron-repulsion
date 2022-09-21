@@ -120,6 +120,10 @@ def get_exec_status(jobid,aws_resources):
         'history': exec_history
     }
 
+def list_execs(aws_resources):
+    executions = sfn.list_executions(stateMachineArn=aws_resources.sfn_arn)['executions']
+    return executions
+
 # Abort state machine execution
 def abort_exec(jobid,aws_resources):
     execution_arn = f"{aws_resources.exec_arn}:{jobid}"

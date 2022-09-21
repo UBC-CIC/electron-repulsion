@@ -22,11 +22,17 @@ export class CdkStack extends Stack {
 
     const repo = new ecr.Repository(this,"repository",{
       encryption: ecr.RepositoryEncryption.KMS,
-      repositoryName: 'integrals-repo'
+      repositoryName: 'integrals-repo',
+      removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
+    const bucketName = new cdk.CfnParameter(this, "bucketName", {
+      type: "String",
+      description: "The name of the Amazon S3 bucket where all outputs will be stored. Value must be globally unique"}
+    );
+
     const bucket = new s3.Bucket(this,"S3Bucket",{
-      bucketName: "integrals-bucket",
+      bucketName: bucketName.valueAsString,
       // TO REMOVE LATER
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
@@ -94,10 +100,6 @@ export class CdkStack extends Stack {
             {
               name: 'JSON_OUTPUT_PATH',
               value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
-            },
-            {
-              name: 'BATCH_EXECUTION',
-              value: sfn.JsonPath.stringAt('$.inputs.batch_execution')
             }
           ]
         }
@@ -131,7 +133,10 @@ export class CdkStack extends Stack {
       role: readInfoS3Role,
       functionName: "readInfoS3CDK",
       timeout: cdk.Duration.seconds(20),
-      memorySize: 256
+      memorySize: 256,
+      environment: {
+        "ER_S3_BUCKET": bucketName.valueAsString
+      }
     });
 
     const readInfoS3Step = new tasks.LambdaInvoke(this,"readInfoS3Step",{
@@ -171,7 +176,7 @@ export class CdkStack extends Stack {
       ]
     });
 
-    const batchInstancRole = new iam.Role(this,"batchInstanceRole",{
+    const batchInstanceRole = new iam.Role(this,"batchInstanceRole",{
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       description: 'Role for Batch Instances',
       managedPolicies: [
@@ -181,9 +186,9 @@ export class CdkStack extends Stack {
     })
 
     const EcsInstanceProfile = new iam.CfnInstanceProfile(this, 'ECSInstanceProfile', {
-      instanceProfileName: batchInstancRole.roleName,
+      instanceProfileName: batchInstanceRole.roleName,
       roles: [
-        batchInstancRole.roleName
+        batchInstanceRole.roleName
       ]
     });
 
@@ -202,7 +207,7 @@ export class CdkStack extends Stack {
       computeResources: {
         type: 'SPOT',
         spotIamFleetRole: spotFleetRole.roleArn,
-        maxvCpus: 256,
+        maxvCpus: 16,
         minvCpus: 0,
         instanceRole: EcsInstanceProfile.attrArn,
         instanceTypes: ['optimal'],
@@ -257,11 +262,11 @@ export class CdkStack extends Stack {
     const stepFuncDefinition = integralsInfoStep
                                .next(readInfoS3Step)
                                .next(new sfn.Choice(this,"batchExec")
-                                  // Batch Execution False
+                                  // No batch execution
                                   .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
                                     batchSubmitJobTask
                                   )
-                                  // Batch Execution True
+                                  // Batch execution
                                   .otherwise(integralsTwoElectronsIntegralsSeqStep)
                                );
 
