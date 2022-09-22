@@ -112,4 +112,4 @@ projects.
 
 You will need AWS environment variables set in your shell (`AWS_DEFAULT_REGION` and `AWS_PROFILE` work):
 
-  ./cli.sh execute-state-machine --help
+  ./cli.sh execute-state-machine --xyz https://raw.githubusercontent.com/urysegal/xyzfiles/main/h2o.xyz --basis_set sto-3g --bucket ${YOUR_S3_BUCKET}
