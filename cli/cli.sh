@@ -5,5 +5,6 @@
 
 set -eu
 
-exec .venv/bin/python3 -m cli $@
+cd "$(dirname $0)"
 
+exec .venv/bin/python3 -m cli.main $@
