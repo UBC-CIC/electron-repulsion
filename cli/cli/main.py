@@ -78,7 +78,7 @@ def two_electrons_integrals(xyz,basis_set,jobid,bucket,output_object,begin,end):
 @click.option('--s3_bucket',help="Path in S3 to store output of the info step",required=True)
 @click.option('--num_parts',help="Number of parts to divide the two_electrons_integrals step into", default=2)
 @click.option('--batch_execution',help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
-def execute_state_machine(xyz,basis_set,s3_bucket,num_parts,max_batch_jobs,batch_execution):
+def execute_state_machine(xyz,basis_set,s3_bucket,num_parts,batch_execution):
     click.echo("Getting resources...")
     aws_resources = resolve_resource_config()
     click.echo("Starting state machine execution...")
