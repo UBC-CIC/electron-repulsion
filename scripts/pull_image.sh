@@ -23,3 +23,5 @@ docker login --username AWS --password ${PASSWORD} ${REPO}
 set -x
 
 docker pull ${REPO}
+
+docker tag integrals:latest ${REPO}

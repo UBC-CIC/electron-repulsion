@@ -22,4 +22,6 @@ docker login --username AWS --password ${PASSWORD} ${REPO}
 
 set -x
 
+docker image tag integrals:latest ${REPO}
+
 docker push ${REPO}

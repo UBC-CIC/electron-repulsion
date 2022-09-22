@@ -16,6 +16,7 @@ setup(
             'isort',
             'mypy',
             'pytest',
+            'boto3-stubs[essential,stepfunctions,ecs,sts]'
         ],
     }
 )
