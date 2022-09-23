@@ -1,6 +1,6 @@
 import click
 import uuid
-import cli.helpers as helpers
+import helpers as helpers
 
 
 @click.group()
@@ -74,10 +74,11 @@ def two_electrons_integrals(xyz, basis_set, jobid, bucket, output_object, begin,
 @click.option('--xyz', help="URL to xyz file", required=True)
 @click.option('--basis_set', help="Basis set to be used", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
-@click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=2)
+@click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=1)
 @click.option(
     '--batch_execution', help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
-def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
+@click.option('--max_batch_jobs',help="Maximum number of AWS Batch jobs running at any given time", default=1)
+def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution, max_batch_jobs):
     click.echo("Getting resources...")
     aws_resources = helpers.resolve_resource_config(bucket)
     click.echo("Starting state machine execution...")
@@ -94,6 +95,7 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
             "s3_bucket": f's3://{bucket}/info/{job_id}.json',
             "num_batch_jobs": num_parts,
             "jobid": job_id,
+            "max_batch_jobs": max_batch_jobs,
             "batch_execution": batch_execution
         }
     }

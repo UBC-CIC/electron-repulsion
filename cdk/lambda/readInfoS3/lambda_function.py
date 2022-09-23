@@ -69,7 +69,10 @@ def writeArgsToS3(n,jobid,numSlices):
 
 def lambda_handler(event, context):
     file_location = event['inputs']['s3_bucket'].replace(f"s3://{bucket_name}/",'')
-    numSlices = int(event['inputs']['num_batch_jobs'])
+    numSlices = int(event['inputs']['num_batch_jobs'] if 'num_batch_jobs' in event['inputs'] else 0)
+    print('max_batch_jobs' in event['inputs'])
+    print(event['inputs'])
+    max_batch_jobs = int(event['inputs']['max_batch_jobs'] if 'max_batch_jobs' in event['inputs'] else 0)
     batch_execution = event['inputs']['batch_execution']
     obj = s3.get_object(
         Bucket=bucket_name,
@@ -80,7 +83,7 @@ def lambda_handler(event, context):
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
-        if batch_execution == "true":
+        if batch_execution == 'true':
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -97,7 +100,7 @@ def lambda_handler(event, context):
                         '--begin', '0,0,0,0',
                         '--end', f"{objDict['basis_set_instance_size']},0,0,0",
                         '--bucket',bucket_name,
-                        '--output_object',f"{jobid}-integrals.bin"
+                        '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
         return {
             'statusCode': 200,
@@ -106,7 +109,8 @@ def lambda_handler(event, context):
                     'n': objDict['basis_set_instance_size'],
                     'commands': commands,
                     's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
-                    'numSlices': numSlices,
+                    'num_slices': numSlices,
+                    'max_batch_jobs': max_batch_jobs,
                     'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
                     'batch_execution': batch_execution
                 }

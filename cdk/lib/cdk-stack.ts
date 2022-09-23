@@ -113,7 +113,7 @@ export class CdkStack extends Stack {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Role for readInfoS3',
       managedPolicies: [
-        ManagedPolicy.fromManagedPolicyArn(this,'ecsBucketPolicy2','arn:aws:iam::aws:policy/AmazonS3FullAccess')
+        ManagedPolicy.fromManagedPolicyArn(this,'readInfoS3PolicyFA','arn:aws:iam::aws:policy/AmazonS3FullAccess')
       ],
       roleName: "reafInfoS3Role"
     });
@@ -242,6 +242,8 @@ export class CdkStack extends Stack {
       }
     });
 
+    // Execute Batch as an array job
+
     const batchSubmitJobTask = new tasks.BatchSubmitJob(this,"batchSubmitJobTask",{
       jobDefinitionArn: `arn:aws:batch:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:job-definition/${batchJobDefinition.jobDefinitionName}`,
       jobName: 'tei_batch_job_submission',
@@ -250,21 +252,69 @@ export class CdkStack extends Stack {
         command: sfn.JsonPath.listAt("$.inputs.commands"),
         environment: {
           "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket"),
-          "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path")
+          "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path"),
+          "LINE": sfn.JsonPath.stringAt("$.inputs.line")
         }
       },
-      arraySize: sfn.JsonPath.numberAt("$.inputs.numSlices"),
+      resultPath: "$.output",
+      arraySize: sfn.JsonPath.numberAt("$.inputs.next_execution_array_size"),
       integrationPattern: sfn.IntegrationPattern.RUN_JOB
+    });
+
+    // Execute Batch as a single job
+
+    const singleBatchExec = new tasks.BatchSubmitJob(this,"singleBatchExec",{
+      jobDefinitionArn: `arn:aws:batch:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:job-definition/${batchJobDefinition.jobDefinitionName}`,
+      jobName: 'tei_batch_job_submission',
+      jobQueueArn: batchJobQueue.attrJobQueueArn,
+      containerOverrides: {
+        command: sfn.JsonPath.listAt("$.inputs.commands"),
+        environment: {
+          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket"),
+          "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path"),
+          "LINE": sfn.JsonPath.stringAt("$.inputs.line")
+        }
+      },
+      resultPath: "$.output",
+      integrationPattern: sfn.IntegrationPattern.RUN_JOB
+    });
+
+    // Lambda function to check loop conditions
+
+    const batchLoopHandlerLambda = new lambda.Function(this,"batchLoopHandlerLambda",{
+      runtime: lambda.Runtime.PYTHON_3_9,
+      handler: 'lambda_function.lambda_handler',
+      code: lambda.Code.fromAsset('./lambda/batchLoopHandler/'),
+      functionName: "batchLoopHandler",
+      timeout: cdk.Duration.seconds(20),
+      memorySize: 256
+    });
+
+    const batchLoopHandlerStep = new tasks.LambdaInvoke(this,"batchLoopHandlerStep",{
+      lambdaFunction: batchLoopHandlerLambda,
+      outputPath: "$.Payload"
     });
 
     const logGroup = new logs.LogGroup(this,'LogGroup');
 
     const stepFuncDefinition = integralsInfoStep
                                .next(readInfoS3Step)
-                               .next(new sfn.Choice(this,"batchExec")
+                               .next(new sfn.Choice(this,"batchExecChoice")
                                   // No batch execution
                                   .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
-                                    batchSubmitJobTask
+                                    batchLoopHandlerStep
+                                    .next(new sfn.Choice(this,"loopConditionCheck")
+                                      // Multiple jobs left
+                                      .when(sfn.Condition.numberGreaterThan("$.inputs.next_execution_array_size",1),
+                                        batchSubmitJobTask.next(batchLoopHandlerStep)
+                                      )
+                                      // One job left
+                                      .when(sfn.Condition.numberEquals("$.inputs.next_execution_array_size",1),
+                                      singleBatchExec.next(batchLoopHandlerStep)
+                                      )
+                                      // No job left
+                                      .otherwise(new sfn.Succeed(this, 'Batch Loop Done!'))
+                                    )
                                   )
                                   // Batch execution
                                   .otherwise(integralsTwoElectronsIntegralsSeqStep)
