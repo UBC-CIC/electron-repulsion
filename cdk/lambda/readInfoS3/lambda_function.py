@@ -77,35 +77,57 @@ def lambda_handler(event, context):
     )
     objDict = json.loads(obj['Body'].read())
     jobid = event['inputs']['jobid']
+    xyz = get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
+    basis_set = get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
-        commands = []
+        commands_tei = []
         if batch_execution == "true":
-            commands = [
+            commands_tei = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', xyz,
+                        '--basis_set', basis_set,
                         '--bucket',bucket_name
                         ]
         else:
-            commands = [
+            commands_tei = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', xyz,
+                        '--basis_set', basis_set,
                         '--begin', '0,0,0,0',
                         '--end', f"{objDict['basis_set_instance_size']},0,0,0",
                         '--bucket',bucket_name,
-                        '--output_object',f"{jobid}-integrals.bin"
+                        '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
+        commands_ch = [
+            'core_hamiltonian',
+            '--jobid', jobid,
+            '--xyz', xyz,
+            '--basis_set', basis_set,
+            '--bucket', bucket_name,
+            '--output_object', f"{jobid}_core_hamiltonian.bin"
+            ]
+        commands_om = [
+            'overlap',
+            '--jobid', jobid,
+            '--xyz', xyz,
+            '--basis_set', basis_set,
+            '--bucket', bucket_name,
+            '--output_object', f"{jobid}_overlap_matrix.bin"
+            ]
         return {
             'statusCode': 200,
             'inputs':
                 {
                     'n': objDict['basis_set_instance_size'],
-                    'commands': commands,
-                    's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
+                    'commands_tei': commands_tei,
+                    'commands_ch': commands_ch,
+                    'commands_om': commands_om,
+                    's3_bucket_ch': f"s3://{bucket_name}/core_hamiltonian/{jobid}_ch.json",
+                    's3_bucket_om': f"s3://{bucket_name}/overlap_matrix/{jobid}_om.json",
+                    's3_bucket_tei': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
                     'numSlices': numSlices,
                     'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
                     'batch_execution': batch_execution

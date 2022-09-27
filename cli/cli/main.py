@@ -1,6 +1,6 @@
 import click
 import uuid
-import cli.helpers as helpers
+import helpers as helpers
 
 
 @click.group()

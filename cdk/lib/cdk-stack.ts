@@ -144,6 +144,50 @@ export class CdkStack extends Stack {
       outputPath: "$.Payload"
     });
 
+    // Core Hamiltion parallel step
+
+    const coreHamiltonianStep = new tasks.EcsRunTask(this,"coreHamiltonianStep",{
+      cluster: cluster,
+      launchTarget: new tasks.EcsFargateLaunchTarget(),
+      taskDefinition: ecsTask,
+      containerOverrides: [
+        {
+          containerDefinition: containerDef,
+          command: sfn.JsonPath.listAt('$.inputs.commands_ch'),
+          environment: [
+            {
+              name: 'JSON_OUTPUT_PATH',
+              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_ch')
+            }
+          ]
+        }
+      ],
+      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
+      assignPublicIp: true
+    })
+
+    // Overlap Matrix parallel step
+
+    const overlapMatrixStep = new tasks.EcsRunTask(this,"overlapMatrixStep",{
+      cluster: cluster,
+      launchTarget: new tasks.EcsFargateLaunchTarget(),
+      taskDefinition: ecsTask,
+      containerOverrides: [
+        {
+          containerDefinition: containerDef,
+          command: sfn.JsonPath.listAt('$.inputs.commands_om'),
+          environment: [
+            {
+              name: 'JSON_OUTPUT_PATH',
+              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_om')
+            }
+          ]
+        }
+      ],
+      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
+      assignPublicIp: true
+    })
+
     // Sequential way to run two_electrons_integrals step
 
     const integralsTwoElectronsIntegralsSeqStep = new tasks.EcsRunTask(this,"IntegralsTEI",{
@@ -153,11 +197,11 @@ export class CdkStack extends Stack {
       containerOverrides: [
         {
           containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands'),
+          command: sfn.JsonPath.listAt('$.inputs.commands_tei'),
           environment: [
             {
               name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
+              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_tei')
             }
           ]
         }
@@ -247,9 +291,9 @@ export class CdkStack extends Stack {
       jobName: 'tei_batch_job_submission',
       jobQueueArn: batchJobQueue.attrJobQueueArn,
       containerOverrides: {
-        command: sfn.JsonPath.listAt("$.inputs.commands"),
+        command: sfn.JsonPath.listAt("$.inputs.commands_tei"),
         environment: {
-          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket"),
+          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket_tei"),
           "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path")
         }
       },
@@ -259,15 +303,20 @@ export class CdkStack extends Stack {
 
     const logGroup = new logs.LogGroup(this,'LogGroup');
 
+    // Change this to change batch execution workflow
+
+    const batchExecWorkflow = new sfn.Choice(this,'batchExec')
+                              // Batch execution
+                              .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),batchSubmitJobTask)
+                              // No Batch execution
+                              .otherwise(integralsTwoElectronsIntegralsSeqStep);
+
     const stepFuncDefinition = integralsInfoStep
                                .next(readInfoS3Step)
-                               .next(new sfn.Choice(this,"batchExec")
-                                  // No batch execution
-                                  .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
-                                    batchSubmitJobTask
-                                  )
-                                  // Batch execution
-                                  .otherwise(integralsTwoElectronsIntegralsSeqStep)
+                               .next(new sfn.Parallel(this,'parallelExec')
+                               .branch(coreHamiltonianStep)
+                               .branch(overlapMatrixStep)
+                               .branch(batchExecWorkflow)
                                );
 
 
