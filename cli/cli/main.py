@@ -121,8 +121,10 @@ def get_status(jobid, bucket):
 
     # If Execution Failed
     elif status == 'FAILED':
-        print("Failed")
-        # TODO
+        time = events[0]['timestamp']
+        time = time.strftime("%m/%d/%Y %H:%M:%S")
+        print(f"Execution failed at: {time}")
+        print(f"Cause: {events[0]['executionFailedEventDetails']['cause']}")
 
     # If Execution Running
     elif status == 'RUNNING':
