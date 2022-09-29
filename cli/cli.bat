@@ -2,5 +2,5 @@
 
 CALL .venv/Scripts/activate.bat
 
-python cli/main.py %*
+python -m cli.main %*
 
