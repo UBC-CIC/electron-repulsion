@@ -68,22 +68,22 @@ def writeArgsToS3(n,jobid,numSlices):
     return True
 
 def lambda_handler(event, context):
-    file_location = event['inputs']['s3_bucket'].replace(f"s3://{bucket_name}/",'')
-    numSlices = int(event['inputs']['num_batch_jobs'])
-    batch_execution = event['inputs']['batch_execution']
+    file_location = event['s3_bucket_path'].replace(f"s3://{bucket_name}/",'')
+    numSlices = int(event['num_batch_jobs'])
+    batch_execution = event['batch_execution']
     obj = s3.get_object(
         Bucket=bucket_name,
         Key=file_location
     )
     objDict = json.loads(obj['Body'].read())
-    jobid = event['inputs']['jobid']
+    jobid = event['jobid']
     xyz = get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
     basis_set = get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
-        commands_tei = []
+        commands = []
         if batch_execution == "true":
-            commands_tei = [
+            commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
                         '--xyz', xyz,
@@ -91,7 +91,7 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name
                         ]
         else:
-            commands_tei = [
+            commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
                         '--xyz', xyz,
@@ -101,40 +101,14 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name,
                         '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
-        commands_ch = [
-            'core_hamiltonian',
-            '--jobid', jobid,
-            '--xyz', xyz,
-            '--basis_set', basis_set,
-            '--bucket', bucket_name,
-            '--output_object', f"{jobid}_core_hamiltonian.bin"
-            ]
-        commands_om = [
-            'overlap',
-            '--jobid', jobid,
-            '--xyz', xyz,
-            '--basis_set', basis_set,
-            '--bucket', bucket_name,
-            '--output_object', f"{jobid}_overlap_matrix.bin"
-            ]
         return {
-            'statusCode': 200,
-            'inputs':
-                {
-                    'n': objDict['basis_set_instance_size'],
-                    'commands_tei': commands_tei,
-                    'commands_ch': commands_ch,
-                    'commands_om': commands_om,
-                    's3_bucket_ch': f"s3://{bucket_name}/core_hamiltonian/{jobid}_ch.json",
-                    's3_bucket_om': f"s3://{bucket_name}/overlap_matrix/{jobid}_om.json",
-                    's3_bucket_tei': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
-                    'numSlices': numSlices,
-                    'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
-                    'batch_execution': batch_execution
-                }
+                'n': objDict['basis_set_instance_size'],
+                'commands': commands,
+                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}.json",
+                'numSlices': numSlices,
+                'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
+                'batch_execution': batch_execution
+
         }
     else:
-        return{
-            'statusCode': 400,
-            'body': 'Something went wrong...'
-        }
+        raise Exception('Info step failed!')

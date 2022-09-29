@@ -83,7 +83,6 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
     click.echo("Starting state machine execution...")
     job_id = str(uuid.uuid4())
     inputDict = {
-        "inputs": {
             "commands": [
                 "info",
                 "--xyz",
@@ -91,11 +90,10 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
                 "--basis_set",
                 basis_set
             ],
-            "s3_bucket": f's3://{bucket}/info/{job_id}.json',
+            "s3_bucket_path": f's3://{bucket}/info/{job_id}.json',
             "num_batch_jobs": num_parts,
             "jobid": job_id,
             "batch_execution": batch_execution
-        }
     }
     helpers.exec_state_machine(input=inputDict, aws_resources=aws_resources, name=job_id)
     print("Job started successfully!")

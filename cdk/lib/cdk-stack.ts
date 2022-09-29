@@ -18,7 +18,38 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 export class CdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
-    // The code that defines your stack goes here
+    /**
+     *  Helper Functions
+     */
+
+    // Returns a Lambda function
+    const cdkLambdaFunction = (id: string, codePath: string, name: string): lambda.Function => {
+      return new lambda.Function(this,id,{
+        runtime: lambda.Runtime.PYTHON_3_9,
+        handler: 'lambda_function.lambda_handler',
+        code: lambda.Code.fromAsset(codePath),
+        role: setupLambdaRole,
+        functionName: name,
+        timeout: cdk.Duration.seconds(20),
+        memorySize: 256,
+        environment: {
+          "ER_S3_BUCKET": bucketName.valueAsString
+        }
+      })
+    };
+
+    // Returns LambdaInvoke step in step functions
+    const cdkLambdaInvokeSfn = (id: string, lambdaFunction: lambda.Function): tasks.LambdaInvoke => {
+      return new tasks.LambdaInvoke(this,id,{
+        lambdaFunction: lambdaFunction,
+        outputPath: "$.Payload"
+      })
+    };
+
+
+    /**
+     * Stack code
+     */
 
     const repo = new ecr.Repository(this,"repository",{
       encryption: ecr.RepositoryEncryption.KMS,
@@ -95,11 +126,11 @@ export class CdkStack extends Stack {
       containerOverrides: [
         {
           containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands'),
+          command: sfn.JsonPath.listAt('$.commands'),
           environment: [
             {
               name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
+              value: sfn.JsonPath.stringAt('$.s3_bucket_path')
             }
           ]
         }
@@ -109,13 +140,13 @@ export class CdkStack extends Stack {
       resultPath: "$.output"
     });
 
-    const readInfoS3Role = new iam.Role(this,'readInfoS3Role',{
+    const setupLambdaRole = new iam.Role(this,'setupLambdaRole',{
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Role for readInfoS3',
       managedPolicies: [
         ManagedPolicy.fromManagedPolicyArn(this,'ecsBucketPolicy2','arn:aws:iam::aws:policy/AmazonS3FullAccess')
       ],
-      roleName: "reafInfoS3Role"
+      roleName: "setupLambdaRole"
     });
 
     const basicLambdaExecution = new iam.PolicyStatement({
@@ -124,25 +155,15 @@ export class CdkStack extends Stack {
       resources: [`arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*`]
     });
 
-    readInfoS3Role.addToPolicy(basicLambdaExecution);
+    setupLambdaRole.addToPolicy(basicLambdaExecution);
 
-    const readInfoS3Lambda = new lambda.Function(this,'ReadInfoS3Function',{
-      runtime: lambda.Runtime.PYTHON_3_9,
-      handler: 'lambda_function.lambda_handler',
-      code: lambda.Code.fromAsset('./lambda/readInfoS3/'),
-      role: readInfoS3Role,
-      functionName: "readInfoS3CDK",
-      timeout: cdk.Duration.seconds(20),
-      memorySize: 256,
-      environment: {
-        "ER_S3_BUCKET": bucketName.valueAsString
-      }
-    });
+    const setupTeiLambda = cdkLambdaFunction('setupTEILambda','./lambda/setupTei/','setupTei')
+    const setupCoreHamiltonianLambda = cdkLambdaFunction('setupCoreHamiltonianLambda','./lambda/setupCoreHamiltonian/','setupCoreHamiltonian')
+    const setupOverlapMatrixLambda = cdkLambdaFunction('setupOverlapMatrixLambda','./lambda/setupOverlapMatrix/','setupOverlapMatrix')
 
-    const readInfoS3Step = new tasks.LambdaInvoke(this,"readInfoS3Step",{
-      lambdaFunction: readInfoS3Lambda,
-      outputPath: "$.Payload"
-    });
+    const setupTeiStep = cdkLambdaInvokeSfn('setupTeiStep',setupTeiLambda);
+    const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCoreHamiltonianLambda);
+    const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupOverlapMatrixLambda);
 
     // Core Hamiltion parallel step
 
@@ -153,11 +174,11 @@ export class CdkStack extends Stack {
       containerOverrides: [
         {
           containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands_ch'),
+          command: sfn.JsonPath.listAt('$.commands'),
           environment: [
             {
               name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_ch')
+              value: sfn.JsonPath.stringAt('$.s3_bucket_path')
             }
           ]
         }
@@ -175,11 +196,11 @@ export class CdkStack extends Stack {
       containerOverrides: [
         {
           containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands_om'),
+          command: sfn.JsonPath.listAt('$.commands'),
           environment: [
             {
               name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_om')
+              value: sfn.JsonPath.stringAt('$.s3_bucket_path')
             }
           ]
         }
@@ -197,11 +218,11 @@ export class CdkStack extends Stack {
       containerOverrides: [
         {
           containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands_tei'),
+          command: sfn.JsonPath.listAt('$.commands'),
           environment: [
             {
               name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket_tei')
+              value: sfn.JsonPath.stringAt('$.s3_bucket_path')
             }
           ]
         }
@@ -291,13 +312,13 @@ export class CdkStack extends Stack {
       jobName: 'tei_batch_job_submission',
       jobQueueArn: batchJobQueue.attrJobQueueArn,
       containerOverrides: {
-        command: sfn.JsonPath.listAt("$.inputs.commands_tei"),
+        command: sfn.JsonPath.listAt("$.commands"),
         environment: {
-          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket_tei"),
-          "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path")
+          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.s3_bucket_path"),
+          "ARGS_PATH": sfn.JsonPath.stringAt("$.args_path")
         }
       },
-      arraySize: sfn.JsonPath.numberAt("$.inputs.numSlices"),
+      arraySize: sfn.JsonPath.numberAt("$.numSlices"),
       integrationPattern: sfn.IntegrationPattern.RUN_JOB
     });
 
@@ -307,16 +328,15 @@ export class CdkStack extends Stack {
 
     const batchExecWorkflow = new sfn.Choice(this,'batchExec')
                               // Batch execution
-                              .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),batchSubmitJobTask)
+                              .when(sfn.Condition.stringEquals("$.batch_execution","true"),batchSubmitJobTask)
                               // No Batch execution
                               .otherwise(integralsTwoElectronsIntegralsSeqStep);
 
     const stepFuncDefinition = integralsInfoStep
-                               .next(readInfoS3Step)
                                .next(new sfn.Parallel(this,'parallelExec')
-                               .branch(coreHamiltonianStep)
-                               .branch(overlapMatrixStep)
-                               .branch(batchExecWorkflow)
+                               .branch(setupCoreHamiltonianStep.next(coreHamiltonianStep))
+                               .branch(setupOverlapMatrixStep.next(overlapMatrixStep))
+                               .branch(setupTeiStep.next(batchExecWorkflow))
                                );
 
 
@@ -428,6 +448,7 @@ export class CdkStack extends Stack {
       value: repo.repositoryUri,
       description: "ECR Repository for this stack, push Docker image here."
     });
+
 
     /*
 
