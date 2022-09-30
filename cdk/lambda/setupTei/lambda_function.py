@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+from urllib.parse import urlparse
 
 s3 = boto3.client('s3')
 bucket_name = os.environ['ER_S3_BUCKET']
@@ -18,7 +19,6 @@ def get_xyz(cmds):
 # Add toAdd to a position of indices, used in creating splits
 def addToPosition(pos,toAdd,n):
     retPos = pos[:] # A copy of original list
-    print(f"toAdd: {toAdd}")
     while toAdd>0:
         toAdd-=1
         retPos[3]+=1
@@ -31,7 +31,6 @@ def addToPosition(pos,toAdd,n):
                 if retPos[1] == n:
                     retPos[1] = 0
                     retPos[0]+=1
-        print(retPos)
     return retPos
 
 def listToString(indices):
@@ -68,7 +67,7 @@ def writeArgsToS3(n,jobid,numSlices):
     return True
 
 def lambda_handler(event, context):
-    file_location = event['s3_bucket_path'].replace(f"s3://{bucket_name}/",'')
+    file_location = urlparse(event['s3_bucket_path'], allow_fragments=False).path.lstrip('/')
     numSlices = int(event['num_batch_jobs'])
     batch_execution = event['batch_execution']
     obj = s3.get_object(
