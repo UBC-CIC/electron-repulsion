@@ -110,8 +110,9 @@ def exec_state_machine(input, aws_resources, name):
     return response
 
 
-# Get State Machine Execution Status
+# Get State Machine Execution Status (latest to oldest)
 def get_exec_status(jobid, aws_resources):
+    # TODO Look into nextToken in case it is required
     execution_arn = f"{aws_resources.exec_arn}:{jobid}"
     status = sfn.describe_execution(executionArn=execution_arn)['status']
     exec_history = sfn.get_execution_history(

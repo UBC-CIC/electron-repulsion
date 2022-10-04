@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+from urllib.parse import urlparse
 
 s3 = boto3.client('s3')
 bucket_name = os.environ['ER_S3_BUCKET']
@@ -18,7 +19,6 @@ def get_xyz(cmds):
 # Add toAdd to a position of indices, used in creating splits
 def addToPosition(pos,toAdd,n):
     retPos = pos[:] # A copy of original list
-    print(f"toAdd: {toAdd}")
     while toAdd>0:
         toAdd-=1
         retPos[3]+=1
@@ -31,7 +31,6 @@ def addToPosition(pos,toAdd,n):
                 if retPos[1] == n:
                     retPos[1] = 0
                     retPos[0]+=1
-        print(retPos)
     return retPos
 
 def listToString(indices):
@@ -68,15 +67,17 @@ def writeArgsToS3(n,jobid,numSlices):
     return True
 
 def lambda_handler(event, context):
-    file_location = event['inputs']['s3_bucket'].replace(f"s3://{bucket_name}/",'')
-    numSlices = int(event['inputs']['num_batch_jobs'])
-    batch_execution = event['inputs']['batch_execution']
+    file_location = urlparse(event['s3_bucket_path'], allow_fragments=False).path.lstrip('/')
+    numSlices = int(event['num_batch_jobs'])
+    batch_execution = event['batch_execution']
     obj = s3.get_object(
         Bucket=bucket_name,
         Key=file_location
     )
     objDict = json.loads(obj['Body'].read())
-    jobid = event['inputs']['jobid']
+    jobid = event['jobid']
+    xyz = get_xyz(event['commands'])
+    basis_set = get_basis_set(event['commands'])
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
@@ -84,35 +85,29 @@ def lambda_handler(event, context):
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', xyz,
+                        '--basis_set', basis_set,
                         '--bucket',bucket_name
                         ]
         else:
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
-                        '--xyz', get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
-                        '--basis_set', get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command']),
+                        '--xyz', xyz,
+                        '--basis_set', basis_set,
                         '--begin', '0,0,0,0',
                         '--end', f"{objDict['basis_set_instance_size']},0,0,0",
                         '--bucket',bucket_name,
-                        '--output_object',f"{jobid}-integrals.bin"
+                        '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
         return {
-            'statusCode': 200,
-            'inputs':
-                {
-                    'n': objDict['basis_set_instance_size'],
-                    'commands': commands,
-                    's3_bucket': f"s3://{bucket_name}/two_electrons_integrals/{jobid}_tei.json",
-                    'numSlices': numSlices,
-                    'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
-                    'batch_execution': batch_execution
-                }
+                'n': objDict['basis_set_instance_size'],
+                'commands': commands,
+                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}.json",
+                'numSlices': numSlices,
+                'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
+                'batch_execution': batch_execution
+
         }
     else:
-        return{
-            'statusCode': 400,
-            'body': 'Something went wrong...'
-        }
+        raise Exception('Info step failed!')

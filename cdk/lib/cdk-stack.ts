@@ -13,14 +13,65 @@ import * as batch from 'aws-cdk-lib/aws-batch';
 import { Construct } from 'constructs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { setUncaughtExceptionCaptureCallback } from 'process';
 
 
 export class CdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
-    // The code that defines your stack goes here
+    /**
+     *  Helper Functions
+     */
 
-    const repo = new ecr.Repository(this,"repository",{
+    // Returns a Lambda function
+    const cdkLambdaFunction = (id: string, codePath: string, name: string): lambda.Function => {
+      return new lambda.Function(this,id,{
+        runtime: lambda.Runtime.PYTHON_3_9,
+        handler: 'lambda_function.lambda_handler',
+        code: lambda.Code.fromAsset(codePath),
+        role: setupLambdaRole,
+        functionName: name,
+        timeout: cdk.Duration.seconds(20),
+        memorySize: 256,
+        environment: {
+          "ER_S3_BUCKET": bucketName.valueAsString
+        }
+      })
+    };
+
+    // Returns LambdaInvoke step in step functions
+    const cdkLambdaInvokeSfn = (id: string, lambdaFunction: lambda.Function): tasks.LambdaInvoke => {
+      return new tasks.LambdaInvoke(this,id,{
+        lambdaFunction: lambdaFunction,
+        outputPath: "$.Payload"
+      })
+    };
+
+    // Returns ECS RunTask step in step functions with environment variables passed as arguments
+    const cdkEcsRunTaskSfn = (id: string, env: Array<tasks.TaskEnvironmentVariable>): tasks.EcsRunTask => {
+      return new tasks.EcsRunTask(this,id,{
+        cluster: cluster,
+        launchTarget: new tasks.EcsFargateLaunchTarget(),
+        taskDefinition: ecsTask,
+        containerOverrides: [
+          {
+            containerDefinition: containerDef,
+            command: sfn.JsonPath.listAt('$.commands'),
+            environment: env
+          }
+        ],
+        integrationPattern: sfn.IntegrationPattern.RUN_JOB,
+        assignPublicIp: true,
+        resultPath: "$.output"
+      })
+    }
+
+
+    /**
+     * Stack code
+     */
+
+    const repo = new ecr.Repository(this,"repository", {
       encryption: ecr.RepositoryEncryption.KMS,
       repositoryName: 'integrals-repo',
       removalPolicy: cdk.RemovalPolicy.DESTROY
@@ -33,28 +84,27 @@ export class CdkStack extends Stack {
 
     const bucket = new s3.Bucket(this,"S3Bucket",{
       bucketName: bucketName.valueAsString,
-      // TO REMOVE LATER
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
-    const cluster = new ecs.Cluster(this,'integralsCluster',{
+    const cluster = new ecs.Cluster(this,'integralsCluster', {
       clusterName: 'Integrals-CDK-Cluster',
     });
 
-    cluster.addCapacity('clusterCapacity',{
+    cluster.addCapacity('clusterCapacity', {
       instanceType: new ec2.InstanceType('t3.micro'),
       desiredCapacity: 1,
     });
 
     const vpc = cluster.vpc;
 
-    const securityGroup = new ec2.SecurityGroup(this,'securityGroup',{
+    const securityGroup = new ec2.SecurityGroup(this,'securityGroup', {
       allowAllOutbound: true,
       vpc: vpc,
       securityGroupName: 'cdkVpcSecurityGroup'
     });
 
-    const ecsTaskRole = new iam.Role(this, 'ecsTaskRole',{
+    const ecsTaskRole = new iam.Role(this, 'ecsTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Role for ECS Tasks',
       managedPolicies: [
@@ -63,7 +113,7 @@ export class CdkStack extends Stack {
       ]
     });
 
-    const ecsTask = new ecs.TaskDefinition(this,'ecsTask',{
+    const ecsTask = new ecs.TaskDefinition(this,'ecsTask', {
       compatibility: ecs.Compatibility.FARGATE,
       executionRole: ecsTaskRole,
       taskRole: ecsTaskRole,
@@ -76,7 +126,7 @@ export class CdkStack extends Stack {
     });
 
 
-    const containerDef = ecsTask.addContainer('container',{
+    const containerDef = ecsTask.addContainer('container', {
       image: ecs.ContainerImage.fromEcrRepository(repo,'latest'),
       containerName: 'integralsExecution',
       logging: ecs.LogDrivers.awsLogs({streamPrefix:'electron-repulsion'})
@@ -88,34 +138,20 @@ export class CdkStack extends Stack {
      * For step-functions - Create IAM Policy with GetRole and PassRole and attach to step function role
      */
 
-    const integralsInfoStep = new tasks.EcsRunTask(this,"IntegralInfo",{
-      cluster: cluster,
-      launchTarget: new tasks.EcsFargateLaunchTarget(),
-      taskDefinition: ecsTask,
-      containerOverrides: [
-        {
-          containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands'),
-          environment: [
-            {
-              name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
-            }
-          ]
-        }
-      ],
-      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-      assignPublicIp: true,
-      resultPath: "$.output"
-    });
+    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo", [
+      {
+        name: 'JSON_OUTPUT_PATH',
+        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
+      }
+    ]);
 
-    const readInfoS3Role = new iam.Role(this,'readInfoS3Role',{
+    const setupLambdaRole = new iam.Role(this,'setupLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Role for readInfoS3',
       managedPolicies: [
         ManagedPolicy.fromManagedPolicyArn(this,'ecsBucketPolicy2','arn:aws:iam::aws:policy/AmazonS3FullAccess')
       ],
-      roleName: "reafInfoS3Role"
+      roleName: "setupLambdaRole"
     });
 
     const basicLambdaExecution = new iam.PolicyStatement({
@@ -124,47 +160,49 @@ export class CdkStack extends Stack {
       resources: [`arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*`]
     });
 
-    readInfoS3Role.addToPolicy(basicLambdaExecution);
+    setupLambdaRole.addToPolicy(basicLambdaExecution);
 
-    const readInfoS3Lambda = new lambda.Function(this,'ReadInfoS3Function',{
-      runtime: lambda.Runtime.PYTHON_3_9,
-      handler: 'lambda_function.lambda_handler',
-      code: lambda.Code.fromAsset('./lambda/readInfoS3/'),
-      role: readInfoS3Role,
-      functionName: "readInfoS3CDK",
-      timeout: cdk.Duration.seconds(20),
-      memorySize: 256,
-      environment: {
-        "ER_S3_BUCKET": bucketName.valueAsString
+    const setupTeiLambda = cdkLambdaFunction('setupTEILambda','./lambda/setupTei/','setupTei');
+    const setupCalculationsLambda = cdkLambdaFunction('setupCalculationsLambda','./lambda/setupCalculations/','setupCalculations');
+
+    const setupTeiStep = cdkLambdaInvokeSfn('setupTeiStep',setupTeiLambda);
+    const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCalculationsLambda);
+    const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupCalculationsLambda);
+    const modifyInputsCoreHamiltonian = new sfn.Pass(this, 'modifyInputsCoreHamiltonian', {
+      resultPath: '$.output',
+      result: sfn.Result.fromObject({stepName: "core_hamiltonian"})
+    });
+    const modifyInputsOverlap = new sfn.Pass(this,'modifyInputsOverlap', {
+      resultPath: '$.output',
+      result: sfn.Result.fromObject({stepName: "overlap"})
+    });
+
+    // Core Hamiltion parallel step
+
+    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep", [
+      {
+        name: 'JSON_OUTPUT_PATH',
+        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
       }
-    });
+    ]);
 
-    const readInfoS3Step = new tasks.LambdaInvoke(this,"readInfoS3Step",{
-      lambdaFunction: readInfoS3Lambda,
-      outputPath: "$.Payload"
-    });
+    // Overlap Matrix parallel step
+
+    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep", [
+      {
+        name: 'JSON_OUTPUT_PATH',
+        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
+      }
+    ]);
 
     // Sequential way to run two_electrons_integrals step
 
-    const integralsTwoElectronsIntegralsSeqStep = new tasks.EcsRunTask(this,"IntegralsTEI",{
-      cluster: cluster,
-      launchTarget: new tasks.EcsFargateLaunchTarget(),
-      taskDefinition: ecsTask,
-      containerOverrides: [
-        {
-          containerDefinition: containerDef,
-          command: sfn.JsonPath.listAt('$.inputs.commands'),
-          environment: [
-            {
-              name: 'JSON_OUTPUT_PATH',
-              value: sfn.JsonPath.stringAt('$.inputs.s3_bucket')
-            }
-          ]
-        }
-      ],
-      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-      assignPublicIp: true
-    });
+    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI", [
+      {
+        name: 'JSON_OUTPUT_PATH',
+        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
+      }
+    ]);
 
     // AWS Batch way of running two_electrons_integrals step (including Batch setup)
 
@@ -247,27 +285,31 @@ export class CdkStack extends Stack {
       jobName: 'tei_batch_job_submission',
       jobQueueArn: batchJobQueue.attrJobQueueArn,
       containerOverrides: {
-        command: sfn.JsonPath.listAt("$.inputs.commands"),
+        command: sfn.JsonPath.listAt("$.commands"),
         environment: {
-          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.inputs.s3_bucket"),
-          "ARGS_PATH": sfn.JsonPath.stringAt("$.inputs.args_path")
+          "JSON_OUTPUT_PATH": sfn.JsonPath.stringAt("$.s3_bucket_path"),
+          "ARGS_PATH": sfn.JsonPath.stringAt("$.args_path")
         }
       },
-      arraySize: sfn.JsonPath.numberAt("$.inputs.numSlices"),
+      arraySize: sfn.JsonPath.numberAt("$.numSlices"),
       integrationPattern: sfn.IntegrationPattern.RUN_JOB
     });
 
     const logGroup = new logs.LogGroup(this,'LogGroup');
 
+    // Change this to change batch execution workflow
+
+    const batchExecWorkflow = new sfn.Choice(this,'batchExec')
+                              // Batch execution
+                              .when(sfn.Condition.stringEquals("$.batch_execution","true"),batchSubmitJobTask)
+                              // No Batch execution
+                              .otherwise(integralsTwoElectronsIntegralsSeqStep);
+
     const stepFuncDefinition = integralsInfoStep
-                               .next(readInfoS3Step)
-                               .next(new sfn.Choice(this,"batchExec")
-                                  // No batch execution
-                                  .when(sfn.Condition.stringEquals("$.inputs.batch_execution","true"),
-                                    batchSubmitJobTask
-                                  )
-                                  // Batch execution
-                                  .otherwise(integralsTwoElectronsIntegralsSeqStep)
+                               .next(new sfn.Parallel(this,'parallelExec')
+                               .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
+                               .branch(modifyInputsOverlap.next(setupOverlapMatrixStep).next(overlapMatrixStep))
+                               .branch(setupTeiStep.next(batchExecWorkflow))
                                );
 
 
@@ -379,6 +421,7 @@ export class CdkStack extends Stack {
       value: repo.repositoryUri,
       description: "ECR Repository for this stack, push Docker image here."
     });
+
 
     /*
 
