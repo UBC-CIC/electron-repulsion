@@ -76,8 +76,8 @@ def lambda_handler(event, context):
     )
     objDict = json.loads(obj['Body'].read())
     jobid = event['jobid']
-    xyz = get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
-    basis_set = get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
+    xyz = get_xyz(event['commands'])
+    basis_set = get_basis_set(event['commands'])
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []

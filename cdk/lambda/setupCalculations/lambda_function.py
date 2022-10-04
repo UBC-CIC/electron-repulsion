@@ -16,18 +16,21 @@ def get_xyz(cmds):
             return cmds[i+1]
 
 def lambda_handler(event, context):
+    print(event)
     jobid = event['jobid']
-    basis_set = get_basis_set(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
-    xyz = get_xyz(event['output']['Overrides']['ContainerOverrides'][0]['Command'])
+    basis_set = get_basis_set(event['commands'])
+    xyz = get_xyz(event['commands'])
+    stepName = event['output']['stepName']
     commands = [
-            'overlap',
+            stepName,
             '--jobid', jobid,
             '--xyz', xyz,
             '--basis_set', basis_set,
             '--bucket', bucket_name,
-            '--output_object', f"{jobid}_overlap_matrix.bin"
+            '--output_object', f"{jobid}_{stepName}.bin"
             ]
     return {
         'commands': commands,
-        's3_bucket_path': f"s3://{bucket_name}/overlap/{jobid}.json"
+        's3_bucket_path': f"s3://{bucket_name}/{stepName}/{jobid}.json"
     }
+

@@ -13,6 +13,7 @@ import * as batch from 'aws-cdk-lib/aws-batch';
 import { Construct } from 'constructs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { setUncaughtExceptionCaptureCallback } from 'process';
 
 
 export class CdkStack extends Stack {
@@ -83,7 +84,6 @@ export class CdkStack extends Stack {
 
     const bucket = new s3.Bucket(this,"S3Bucket",{
       bucketName: bucketName.valueAsString,
-      // TO REMOVE LATER
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
@@ -162,13 +162,20 @@ export class CdkStack extends Stack {
 
     setupLambdaRole.addToPolicy(basicLambdaExecution);
 
-    const setupTeiLambda = cdkLambdaFunction('setupTEILambda','./lambda/setupTei/','setupTei')
-    const setupCoreHamiltonianLambda = cdkLambdaFunction('setupCoreHamiltonianLambda','./lambda/setupCoreHamiltonian/','setupCoreHamiltonian')
-    const setupOverlapMatrixLambda = cdkLambdaFunction('setupOverlapMatrixLambda','./lambda/setupOverlapMatrix/','setupOverlapMatrix')
+    const setupTeiLambda = cdkLambdaFunction('setupTEILambda','./lambda/setupTei/','setupTei');
+    const setupCalculationsLambda = cdkLambdaFunction('setupCalculationsLambda','./lambda/setupCalculations/','setupCalculations');
 
     const setupTeiStep = cdkLambdaInvokeSfn('setupTeiStep',setupTeiLambda);
-    const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCoreHamiltonianLambda);
-    const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupOverlapMatrixLambda);
+    const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCalculationsLambda);
+    const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupCalculationsLambda);
+    const modifyInputsCoreHamiltonian = new sfn.Pass(this, 'modifyInputsCoreHamiltonian', {
+      resultPath: '$.output',
+      result: sfn.Result.fromObject({stepName: "core_hamiltonian"})
+    });
+    const modifyInputsOverlap = new sfn.Pass(this,'modifyInputsOverlap', {
+      resultPath: '$.output',
+      result: sfn.Result.fromObject({stepName: "overlap"})
+    });
 
     // Core Hamiltion parallel step
 
@@ -300,8 +307,8 @@ export class CdkStack extends Stack {
 
     const stepFuncDefinition = integralsInfoStep
                                .next(new sfn.Parallel(this,'parallelExec')
-                               .branch(setupCoreHamiltonianStep.next(coreHamiltonianStep))
-                               .branch(setupOverlapMatrixStep.next(overlapMatrixStep))
+                               .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
+                               .branch(modifyInputsOverlap.next(setupOverlapMatrixStep).next(overlapMatrixStep))
                                .branch(setupTeiStep.next(batchExecWorkflow))
                                );
 
