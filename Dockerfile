@@ -31,9 +31,16 @@ COPY ./submodules/integrals ./integrals
 
 RUN cd integrals && cmake . && make
 
-RUN mkdir ./scripts
+FROM ubuntu:22.04
 
-# TODO: Move these steps to the top of the file
+RUN apt-get update && apt-get -y install libeigen3-dev libgmp-dev libboost-all-dev libcurl4-openssl-dev \
+libspdlog-dev libssl-dev nlohmann-json3-dev uuid-dev zlib1g-dev libpulse-dev && apt-get clean
+
+COPY --from=0 /usr/local /usr/local
+
+RUN mkdir ./integrals && mkdir ./scripts
+
+COPY --from=0 ./integrals ./integrals
 
 COPY ./scripts ./scripts
 
