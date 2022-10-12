@@ -33,10 +33,7 @@ RUN cd integrals && cmake . && make
 
 FROM ubuntu:22.04
 
-# Copying packages needed during runtime over from stage 0 to stage 1, if the next command fails replace it with the following:
-# RUN apt-get update && apt-get -y install libeigen3-dev libgmp-dev libboost-all-dev libcurl4-openssl-dev libspdlog-dev libssl-dev nlohmann-json3-dev uuid-dev zlib1g-dev libpulse-dev && apt-get clean
-
-COPY --from=0 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
+RUN apt-get update && apt-get -y install libeigen3-dev libgmp-dev libboost-all-dev libcurl4-openssl-dev libspdlog-dev libssl-dev nlohmann-json3-dev uuid-dev zlib1g-dev libpulse-dev && apt-get clean
 
 COPY --from=0 /usr/local /usr/local
 

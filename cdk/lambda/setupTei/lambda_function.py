@@ -91,7 +91,7 @@ def lambda_handler(event, context):
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
-        if batch_execution == "true":
+        if batch_execution == "true" and numSlices > 1:
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
