@@ -20,18 +20,22 @@ def get_xyz(cmds):
 # Add toAdd to a position of indices, used in creating splits
 def addToPosition(pos,toAdd,n):
     retPos = pos[:] # A copy of original list
+    tens = n
+    hundreds = n**2
+    thousands = n**3
     while toAdd>0:
-        toAdd-=1
-        retPos[3]+=1
-        if retPos[3] == n:
-            retPos[3] = 0
+        if toAdd>=thousands:
+            retPos[0]+=1
+            toAdd-=thousands
+        elif toAdd>=hundreds:
+            retPos[1]+=1
+            toAdd-=hundreds
+        elif toAdd>=tens:
             retPos[2]+=1
-            if retPos[2] == n:
-                retPos[2] = 0
-                retPos[1]+=1
-                if retPos[1] == n:
-                    retPos[1] = 0
-                    retPos[0]+=1
+            toAdd-=tens
+        else:
+            retPos[3]+=1
+            toAdd-=1
     return retPos
 
 def listToString(indices):
