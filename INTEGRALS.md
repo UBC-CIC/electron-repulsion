@@ -24,16 +24,12 @@ Sub-commands and their arguments:
   * output_object
   * begin
   * end
-* core_hamiltonian and overlap
+* core_hamiltonian, overlap, and initial_guess
   * jobid
   * xyz
   * basis_set
   * bucket
   * output_object
-* initial_guess
-  * xyz
-  * basis_set
-  * output_url
 * fock_matrix
   * xyz
   * basis_set
