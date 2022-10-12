@@ -299,9 +299,14 @@ export class CdkStack extends Stack {
 
     // Change this to change batch execution workflow
 
+    const batchCondition = sfn.Condition.and(
+      sfn.Condition.stringEquals("$.batch_execution","true"),
+      sfn.Condition.numberGreaterThan('$.numSlices',1)
+    );
+
     const batchExecWorkflow = new sfn.Choice(this,'batchExec')
                               // Batch execution
-                              .when(sfn.Condition.stringEquals("$.batch_execution","true"),batchSubmitJobTask)
+                              .when(batchCondition,batchSubmitJobTask)
                               // No Batch execution
                               .otherwise(integralsTwoElectronsIntegralsSeqStep);
 
@@ -311,7 +316,6 @@ export class CdkStack extends Stack {
                                .branch(modifyInputsOverlap.next(setupOverlapMatrixStep).next(overlapMatrixStep))
                                .branch(setupTeiStep.next(batchExecWorkflow))
                                );
-
 
     // State Machine Role
 

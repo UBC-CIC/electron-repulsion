@@ -74,7 +74,7 @@ def two_electrons_integrals(xyz, basis_set, jobid, bucket, output_object, begin,
 @click.option('--xyz', help="URL to xyz file", required=True)
 @click.option('--basis_set', help="Basis set to be used", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
-@click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=2)
+@click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=None)
 @click.option(
     '--batch_execution', help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
 def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
