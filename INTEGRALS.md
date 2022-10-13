@@ -21,7 +21,7 @@ Sub-commands and their arguments:
   * basis_set
   * jobid
   * bucket
-  * output_object
+  * output_object - `.bin` file
   * begin
   * end
 * core_hamiltonian, overlap, and initial_guess
@@ -34,9 +34,9 @@ Sub-commands and their arguments:
   * xyz
   * basis_set
   * bucket
-  * prefix
+  * eri_prefix - This is the `output_object` of the `two_electron_integrals` step.
   * output_url
-  * scf_output_url - if any (missing if first time)
+  * density_url - Density matrices are created by the initial-guess AND the scf-step. So first time, pass the initial-guess output URL. From then on pass the latest scf-step output.
 * scf_step
   * xyz
   * basis_set
@@ -45,6 +45,10 @@ Sub-commands and their arguments:
   * core_hamiltonian_output_url
   * output_url
   * epsilon - (has reasonable default)
+
+## Example
+
+    ./integrals fock_matrix --jobid "testjob" --xyz "https://raw.githubusercontent.com/urysegal/xyzfiles/main/h2o.xyz" --basis_set sto-3g --bucket two-electrons-integrals.webqc --output_object testfock.bin --density_url s3://path/to/output.bin --eri_prefix testjob
 
 ## Convergence
 
