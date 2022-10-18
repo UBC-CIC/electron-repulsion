@@ -14,7 +14,7 @@ uuid-dev zlib1g-dev libpulse-dev wget unzip && curl "https://awscli.amazonaws.co
 # AWS SDK Setup
 
 RUN git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp && mkdir sdk_build && cd sdk_build && \
-cmake ../aws-sdk-cpp -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local/ -DCMAKE_INSTALL_PREFIX=/usr/local/ -DBUILD_ONLY="s3-crt" && \
+cmake ../aws-sdk-cpp -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local/ -DCMAKE_INSTALL_PREFIX=/usr/local/ -DBUILD_ONLY="s3;s3-crt" && \
 make && make install
 
 # Libint2 setup

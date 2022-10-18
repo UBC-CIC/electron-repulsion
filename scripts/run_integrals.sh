@@ -9,10 +9,22 @@ then
     TO_REPLACE="#JOB_NUMBER"
     REPLACEMENT="_${AWS_BATCH_JOB_ARRAY_INDEX}"
     NEW_JSON_PATH="${JSON_OUTPUT_PATH/"$TO_REPLACE"/"$REPLACEMENT"}"
-    echo $NEW_JSON_PATH
-    aws s3 cp output.json $NEW_JSON_PATH
+    JSON_OUTPUT_PATH=NEW_JSON_PATH
 else
     ./../integrals/integrals $@ | tee output.json
-    # TODO: Add check if JSON_OUTPUT_PATH starts with "s3://"
-    aws s3 cp output.json $JSON_OUTPUT_PATH
+fi
+FILE_SIZE=$(wc -c output.json | awk '{print $1}')
+if [ $FILE_SIZE == 0 ]
+then
+    echo "NO OUTPUT FILE GENERATED"
+    exit 1
+fi
+aws s3 cp output.json $JSON_OUTPUT_PATH
+STATUS=$(jq '.success' output.json)
+if [ $STATUS != "true" ]
+then
+    echo "TASK FAILED"
+    MESSAGE=$(jq '.error' output.json)
+    echo $MESSAGE
+    exit 1
 fi

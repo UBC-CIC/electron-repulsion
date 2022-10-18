@@ -47,8 +47,16 @@ export class CdkStack extends Stack {
       })
     };
 
+    // Returns modify inputs stage
+    const cdkModifyInputs = (id: string, stepName: string): sfn.Pass => {
+      return new sfn.Pass(this,id,{
+        resultPath: "$.output",
+        result: sfn.Result.fromObject({stepName: stepName})
+      });
+    }
+
     // Returns ECS RunTask step in step functions with environment variables passed as arguments
-    const cdkEcsRunTaskSfn = (id: string, env: Array<tasks.TaskEnvironmentVariable>): tasks.EcsRunTask => {
+    const cdkEcsRunTaskSfn = (id: string): tasks.EcsRunTask => {
       return new tasks.EcsRunTask(this,id,{
         cluster: cluster,
         launchTarget: new tasks.EcsFargateLaunchTarget(),
@@ -57,7 +65,12 @@ export class CdkStack extends Stack {
           {
             containerDefinition: containerDef,
             command: sfn.JsonPath.listAt('$.commands'),
-            environment: env
+            environment: [
+              {
+                name: 'JSON_OUTPUT_PATH',
+                value: sfn.JsonPath.stringAt('$.s3_bucket_path')
+              }
+            ]
           }
         ],
         integrationPattern: sfn.IntegrationPattern.RUN_JOB,
@@ -118,7 +131,7 @@ export class CdkStack extends Stack {
       executionRole: ecsTaskRole,
       taskRole: ecsTaskRole,
       cpu: '1024',
-      memoryMiB: '2048',
+      memoryMiB: '4096',
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
       },
@@ -138,12 +151,7 @@ export class CdkStack extends Stack {
      * For step-functions - Create IAM Policy with GetRole and PassRole and attach to step function role
      */
 
-    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo", [
-      {
-        name: 'JSON_OUTPUT_PATH',
-        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
-      }
-    ]);
+    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo");
 
     const setupLambdaRole = new iam.Role(this,'setupLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
@@ -168,41 +176,32 @@ export class CdkStack extends Stack {
     const setupTeiStep = cdkLambdaInvokeSfn('setupTeiStep',setupTeiLambda);
     const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCalculationsLambda);
     const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupCalculationsLambda);
-    const modifyInputsCoreHamiltonian = new sfn.Pass(this, 'modifyInputsCoreHamiltonian', {
-      resultPath: '$.output',
-      result: sfn.Result.fromObject({stepName: "core_hamiltonian"})
-    });
-    const modifyInputsOverlap = new sfn.Pass(this,'modifyInputsOverlap', {
-      resultPath: '$.output',
-      result: sfn.Result.fromObject({stepName: "overlap"})
-    });
+    const setupInitialGuessStep = cdkLambdaInvokeSfn('setupInitialGuessStep',setupCalculationsLambda);
+    const setupFockMatrixStep = cdkLambdaInvokeSfn('setupFockMatrixStep',setupCalculationsLambda);
+    const modifyInputsCoreHamiltonian = cdkModifyInputs('modifyInputsCoreHamiltonian','core_hamiltonian');
+    const modifyInputsOverlap = cdkModifyInputs('modifyInputsOverlap','overlap');
+    const modifyInputsInitialGuess = cdkModifyInputs('modifyInputsInitialGuess','initial_guess');
+    const modifyInputsFockMatrix = cdkModifyInputs('modifyInputsFockMatrix','fock_matrix');
 
     // Core Hamiltion parallel step
 
-    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep", [
-      {
-        name: 'JSON_OUTPUT_PATH',
-        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
-      }
-    ]);
+    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep");
 
     // Overlap Matrix parallel step
 
-    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep", [
-      {
-        name: 'JSON_OUTPUT_PATH',
-        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
-      }
-    ]);
+    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep");
+
+    // Initial Guess parallel step
 
     // Sequential way to run two_electrons_integrals step
 
-    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI", [
-      {
-        name: 'JSON_OUTPUT_PATH',
-        value: sfn.JsonPath.stringAt('$.s3_bucket_path')
-      }
-    ]);
+    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI");
+
+    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep");
+
+    // Fock Matrix step
+
+    const fockMatrixStep = cdkEcsRunTaskSfn("fockMatrixStep");
 
     // AWS Batch way of running two_electrons_integrals step (including Batch setup)
 
@@ -311,11 +310,21 @@ export class CdkStack extends Stack {
                               .otherwise(integralsTwoElectronsIntegralsSeqStep);
 
     const stepFuncDefinition = integralsInfoStep
-                               .next(new sfn.Parallel(this,'parallelExec')
+                               .next(new sfn.Parallel(this,'parallelExec',{
+                                resultSelector: {
+                                  "commands.$": "$[0].commands",
+                                  "s3_bucket_path.$": "$[0].s3_bucket_path",
+                                  "jobid.$": "$[0].jobid"
+                                }
+                               })
                                .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
                                .branch(modifyInputsOverlap.next(setupOverlapMatrixStep).next(overlapMatrixStep))
+                               .branch(modifyInputsInitialGuess.next(setupInitialGuessStep).next(initialGuessStep))
                                .branch(setupTeiStep.next(batchExecWorkflow))
-                               );
+                               )
+                               .next(modifyInputsFockMatrix)
+                               .next(setupFockMatrixStep)
+                               .next(fockMatrixStep);
 
     // State Machine Role
 
