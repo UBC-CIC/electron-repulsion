@@ -1,5 +1,6 @@
 #!/bin/bash
 # Both of these must be set for a batch job
+free -h
 if [ ! -z $ARGS_PATH ] && [ ! -z $AWS_BATCH_JOB_ARRAY_INDEX ]
 then
     aws s3 cp $ARGS_PATH/batch_args.txt /args.txt
@@ -9,7 +10,7 @@ then
     TO_REPLACE="#JOB_NUMBER"
     REPLACEMENT="_${AWS_BATCH_JOB_ARRAY_INDEX}"
     NEW_JSON_PATH="${JSON_OUTPUT_PATH/"$TO_REPLACE"/"$REPLACEMENT"}"
-    JSON_OUTPUT_PATH=NEW_JSON_PATH
+    JSON_OUTPUT_PATH=$NEW_JSON_PATH
 else
     ./../integrals/integrals $@ | tee output.json
 fi
@@ -19,6 +20,7 @@ then
     echo "NO OUTPUT FILE GENERATED"
     exit 1
 fi
+echo $JSON_OUTPUT_PATH
 aws s3 cp output.json $JSON_OUTPUT_PATH
 STATUS=$(jq '.success' output.json)
 if [ $STATUS != "true" ]

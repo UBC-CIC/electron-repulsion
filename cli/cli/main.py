@@ -75,9 +75,10 @@ def two_electrons_integrals(xyz, basis_set, jobid, bucket, output_object, begin,
 @click.option('--basis_set', help="Basis set to be used", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 @click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=None)
+@click.option('--max_iter', help="Maximum number of iterations in the fock-scf loop", default=30)
 @click.option(
     '--batch_execution', help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
-def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
+def execute_state_machine(xyz, basis_set, bucket, num_parts, max_iter, batch_execution):
     click.echo("Getting resources...")
     aws_resources = helpers.resolve_resource_config(bucket)
     click.echo("Starting state machine execution...")
@@ -93,7 +94,8 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, batch_execution):
             "s3_bucket_path": f's3://{bucket}/info/{job_id}.json',
             "num_batch_jobs": num_parts,
             "jobid": job_id,
-            "batch_execution": batch_execution
+            "batch_execution": batch_execution,
+            "max_iter": max_iter
     }
     helpers.exec_state_machine(input=inputDict, aws_resources=aws_resources, name=job_id)
     print("Job started successfully!")

@@ -193,11 +193,11 @@ export class CdkStack extends Stack {
 
     // Initial Guess parallel step
 
+    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep");
+
     // Sequential way to run two_electrons_integrals step
 
     const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI");
-
-    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep");
 
     // Fock Matrix step
 
@@ -314,7 +314,8 @@ export class CdkStack extends Stack {
                                 resultSelector: {
                                   "commands.$": "$[0].commands",
                                   "s3_bucket_path.$": "$[0].s3_bucket_path",
-                                  "jobid.$": "$[0].jobid"
+                                  "jobid.$": "$[0].jobid",
+                                  "max_iter.$": "$[0].max_iter"
                                 }
                                })
                                .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
