@@ -13,7 +13,7 @@ import * as batch from 'aws-cdk-lib/aws-batch';
 import { Construct } from 'constructs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import { setUncaughtExceptionCaptureCallback } from 'process';
+import { nextTick } from 'process';
 
 
 export class CdkStack extends Stack {
@@ -172,16 +172,28 @@ export class CdkStack extends Stack {
 
     const setupTeiLambda = cdkLambdaFunction('setupTEILambda','./lambda/setupTei/','setupTei');
     const setupCalculationsLambda = cdkLambdaFunction('setupCalculationsLambda','./lambda/setupCalculations/','setupCalculations');
+    const updateLoopVariablesLambda = cdkLambdaFunction('updateLoopVariablesLambda','./lambda/updateLoopVariables/','updateLoopVariables');
 
     const setupTeiStep = cdkLambdaInvokeSfn('setupTeiStep',setupTeiLambda);
     const setupCoreHamiltonianStep = cdkLambdaInvokeSfn('setupCoreHamiltonianStep',setupCalculationsLambda);
     const setupOverlapMatrixStep = cdkLambdaInvokeSfn('setupOverlapMatrixStep',setupCalculationsLambda);
     const setupInitialGuessStep = cdkLambdaInvokeSfn('setupInitialGuessStep',setupCalculationsLambda);
     const setupFockMatrixStep = cdkLambdaInvokeSfn('setupFockMatrixStep',setupCalculationsLambda);
+    const setupScfStep = cdkLambdaInvokeSfn('setupScfStep',setupCalculationsLambda);
+    const updateLoopVariables = cdkLambdaInvokeSfn('updateLoopVariables',updateLoopVariablesLambda);
+
     const modifyInputsCoreHamiltonian = cdkModifyInputs('modifyInputsCoreHamiltonian','core_hamiltonian');
     const modifyInputsOverlap = cdkModifyInputs('modifyInputsOverlap','overlap');
     const modifyInputsInitialGuess = cdkModifyInputs('modifyInputsInitialGuess','initial_guess');
     const modifyInputsFockMatrix = cdkModifyInputs('modifyInputsFockMatrix','fock_matrix');
+    const modifyInputsScf = cdkModifyInputs('modifyInputsScf','scf_step');
+    const initializeLoopVariables = new sfn.Pass(this,'initializeLoopVariables',{
+      result: sfn.Result.fromObject({
+        "loopCount": 1,
+        "hartree_diff": 1
+      }),
+      resultPath: "$.loopData"
+    });
 
     // Core Hamiltion parallel step
 
@@ -202,6 +214,10 @@ export class CdkStack extends Stack {
     // Fock Matrix step
 
     const fockMatrixStep = cdkEcsRunTaskSfn("fockMatrixStep");
+
+    // Scf Step
+
+    const scfStep = cdkEcsRunTaskSfn("scfStep");
 
     // AWS Batch way of running two_electrons_integrals step (including Batch setup)
 
@@ -303,11 +319,30 @@ export class CdkStack extends Stack {
       sfn.Condition.numberGreaterThan('$.numSlices',1)
     );
 
+    const loopCondition = sfn.Condition.and(
+      sfn.Condition.numberLessThanEqualsJsonPath("$.loopData.loopCount","$.max_iter"),
+      sfn.Condition.numberGreaterThan("$.loopData.hartree_diff",0.000000001)
+    );
+
     const batchExecWorkflow = new sfn.Choice(this,'batchExec')
                               // Batch execution
                               .when(batchCondition,batchSubmitJobTask)
                               // No Batch execution
                               .otherwise(integralsTwoElectronsIntegralsSeqStep);
+
+    const fockScfLoop = new sfn.Choice(this,'Loop');
+
+    const loopBody = modifyInputsFockMatrix
+                    .next(setupFockMatrixStep)
+                    .next(fockMatrixStep)
+                    .next(modifyInputsScf)
+                    .next(setupScfStep)
+                    .next(scfStep)
+                    .next(updateLoopVariables)
+                    .next(fockScfLoop);
+
+    fockScfLoop.when(loopCondition,loopBody)
+               .otherwise(new sfn.Succeed(this,"Success"));
 
     const stepFuncDefinition = integralsInfoStep
                                .next(new sfn.Parallel(this,'parallelExec',{
@@ -323,9 +358,8 @@ export class CdkStack extends Stack {
                                .branch(modifyInputsInitialGuess.next(setupInitialGuessStep).next(initialGuessStep))
                                .branch(setupTeiStep.next(batchExecWorkflow))
                                )
-                               .next(modifyInputsFockMatrix)
-                               .next(setupFockMatrixStep)
-                               .next(fockMatrixStep);
+                               .next(initializeLoopVariables)
+                               .next(fockScfLoop)
 
     // State Machine Role
 

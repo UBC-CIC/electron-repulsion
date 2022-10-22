@@ -30,19 +30,19 @@ def addToPosition(pos,toAdd,n):
         elif toAdd>=hundreds:
             retPos[1]+=1
             toAdd-=hundreds
-            if retPos[1]>n:
+            if retPos[1]>=n:
                 retPos[1] = 0
                 retPos[0]+=1
         elif toAdd>=tens:
             retPos[2]+=1
             toAdd-=tens
-            if retPos[2]>n:
+            if retPos[2]>=n:
                 retPos[2] = 0
                 retPos[1]+=1
         else:
             retPos[3]+=1
             toAdd-=1
-            if retPos[3]>n:
+            if retPos[3]>=n:
                 retPos[3] = 0
                 retPos[2]+=1
     return retPos
