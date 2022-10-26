@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import math
 from urllib.parse import urlparse
 
 s3 = boto3.client('s3')
@@ -19,18 +20,31 @@ def get_xyz(cmds):
 # Add toAdd to a position of indices, used in creating splits
 def addToPosition(pos,toAdd,n):
     retPos = pos[:] # A copy of original list
+    tens = n
+    hundreds = n**2
+    thousands = n**3
     while toAdd>0:
-        toAdd-=1
-        retPos[3]+=1
-        if retPos[3] == n:
-            retPos[3] = 0
+        if toAdd>=thousands:
+            retPos[0]+=1
+            toAdd-=thousands
+        elif toAdd>=hundreds:
+            retPos[1]+=1
+            toAdd-=hundreds
+            if retPos[1]>=n:
+                retPos[1] = 0
+                retPos[0]+=1
+        elif toAdd>=tens:
             retPos[2]+=1
-            if retPos[2] == n:
+            toAdd-=tens
+            if retPos[2]>=n:
                 retPos[2] = 0
                 retPos[1]+=1
-                if retPos[1] == n:
-                    retPos[1] = 0
-                    retPos[0]+=1
+        else:
+            retPos[3]+=1
+            toAdd-=1
+            if retPos[3]>=n:
+                retPos[3] = 0
+                retPos[2]+=1
     return retPos
 
 def listToString(indices):
@@ -66,9 +80,17 @@ def writeArgsToS3(n,jobid,numSlices):
     s3.upload_file('/tmp/'+ fileNameBatch, bucket_name, f"tei_args/{jobid}/{fileNameBatch}")
     return True
 
+# Find split size so that each input size to batch is approximately 500 MB
+def getNumSlices(n):
+    numIntegrals = n**4
+    # 500 MB = 500,000,000 bytes, 1 integral = 8 bytes, each batch job should have a maximum of 500 MB / 8 B items to work with
+    # MAX_ITEMS = 62,500,000
+    MAX_ITEMS = 62500000
+    return int(math.ceil(numIntegrals/MAX_ITEMS)) # Keeping max less than 500 MB
+
+
 def lambda_handler(event, context):
     file_location = urlparse(event['s3_bucket_path'], allow_fragments=False).path.lstrip('/')
-    numSlices = int(event['num_batch_jobs'])
     batch_execution = event['batch_execution']
     obj = s3.get_object(
         Bucket=bucket_name,
@@ -77,11 +99,12 @@ def lambda_handler(event, context):
     objDict = json.loads(obj['Body'].read())
     jobid = event['jobid']
     xyz = get_xyz(event['commands'])
+    numSlices = int(event['num_batch_jobs']) if event['num_batch_jobs'] != None else getNumSlices(objDict['basis_set_instance_size'])
     basis_set = get_basis_set(event['commands'])
     if(objDict['success']):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
-        if batch_execution == "true":
+        if batch_execution == "true" and numSlices > 1:
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -103,11 +126,11 @@ def lambda_handler(event, context):
         return {
                 'n': objDict['basis_set_instance_size'],
                 'commands': commands,
-                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}.json",
+                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}#JOB_NUMBER.json",
                 'numSlices': numSlices,
                 'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
-                'batch_execution': batch_execution
-
+                'batch_execution': batch_execution,
+                'jobid': jobid
         }
     else:
         raise Exception('Info step failed!')
