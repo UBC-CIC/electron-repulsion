@@ -43,10 +43,6 @@ COPY --from=0 ./integrals ./integrals
 
 COPY ./scripts ./scripts
 
-RUN mkdir ./test
-
-COPY ./test ./test
-
 ENTRYPOINT [ "./scripts/run_integrals.sh" ]
 
 

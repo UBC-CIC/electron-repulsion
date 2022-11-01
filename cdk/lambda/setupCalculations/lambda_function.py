@@ -63,6 +63,7 @@ def lambda_handler(event, context):
         'jobid': jobid,
         'max_iter': event['max_iter'],
         'hartree_fock_energy': event['hartree_fock_energy'] if 'hartree_fock_energy' in event else None,
-        'loopData': event['loopData'] if 'loopData' in event else None
+        'loopData': event['loopData'] if 'loopData' in event else None,
+        'epsilon': event['epsilon']
     }
 

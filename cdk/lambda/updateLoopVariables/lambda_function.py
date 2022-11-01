@@ -12,7 +12,7 @@ def lambda_handler(event, context):
         )
     scf_output = json.loads(scf_output_json['Body'].read())
     hartree_fock_energy = scf_output['hartree_fock_energy']
-    diff = 1
+    diff = event['loopData']['hartree_diff']
     if(event['hartree_fock_energy']):
         diff = abs(hartree_fock_energy - event['hartree_fock_energy'])
     loopData = event['loopData']
@@ -24,5 +24,6 @@ def lambda_handler(event, context):
         'max_iter': event['max_iter'],
         'commands': event['commands'],
         'hartree_fock_energy': hartree_fock_energy,
-        'loopData': loopData
+        'loopData': loopData,
+        'epsilon': event['epsilon']
     }

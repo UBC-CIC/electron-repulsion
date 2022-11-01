@@ -190,7 +190,7 @@ export class CdkStack extends Stack {
     const initializeLoopVariables = new sfn.Pass(this,'initializeLoopVariables',{
       result: sfn.Result.fromObject({
         "loopCount": 1,
-        "hartree_diff": 1
+        "hartree_diff": Number.MAX_VALUE
       }),
       resultPath: "$.loopData"
     });
@@ -286,7 +286,7 @@ export class CdkStack extends Stack {
         image: ecs.ContainerImage.fromEcrRepository(repo,'latest').imageName,
         executionRoleArn: ecsTaskRole.roleArn,
         vcpus: 1,
-        memory: 512
+        memory: 1024
       },
       jobDefinitionName: "batch_job_definition",
       platformCapabilities: ['EC2'],
@@ -321,7 +321,7 @@ export class CdkStack extends Stack {
 
     const loopCondition = sfn.Condition.and(
       sfn.Condition.numberLessThanEqualsJsonPath("$.loopData.loopCount","$.max_iter"),
-      sfn.Condition.numberGreaterThan("$.loopData.hartree_diff",0.000000001)
+      sfn.Condition.numberGreaterThanJsonPath("$.loopData.hartree_diff","$.epsilon")
     );
 
     const batchExecWorkflow = new sfn.Choice(this,'batchExec')
@@ -350,7 +350,8 @@ export class CdkStack extends Stack {
                                   "commands.$": "$[0].commands",
                                   "s3_bucket_path.$": "$[0].s3_bucket_path",
                                   "jobid.$": "$[0].jobid",
-                                  "max_iter.$": "$[0].max_iter"
+                                  "max_iter.$": "$[0].max_iter",
+                                  "epsilon.$": "$[0].epsilon"
                                 }
                                })
                                .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
