@@ -24,4 +24,4 @@ set -x
 
 docker pull ${REPO}
 
-docker tag integrals:latest ${REPO}
+docker tag ${REPO} integrals:latest
