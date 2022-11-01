@@ -48,7 +48,7 @@ Sub-commands and their arguments:
 
 ## Example
 
-    ./integrals fock_matrix --jobid "testjob" --xyz "https://raw.githubusercontent.com/urysegal/xyzfiles/main/h2o.xyz" --basis_set sto-3g --bucket two-electrons-integrals.webqc --output_object testfock.bin --density_url s3://path/to/output.bin --eri_prefix testjob
+    ./integrals fock_matrix --jobid testjob --xyz https://raw.githubusercontent.com/urysegal/xyzfiles/main/h2o.xyz --basis_set sto-3g --bucket two-electrons-integrals.webqc --output_url s3://path/to/output.bin --density_url s3://path/to/density.bin --eri_prefix testjob
 
 ## Convergence
 
