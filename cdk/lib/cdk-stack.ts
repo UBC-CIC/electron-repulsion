@@ -286,7 +286,7 @@ export class CdkStack extends Stack {
         image: ecs.ContainerImage.fromEcrRepository(repo,'latest').imageName,
         executionRoleArn: ecsTaskRole.roleArn,
         vcpus: 1,
-        memory: 1024
+        memory: 4096
       },
       jobDefinitionName: "batch_job_definition",
       platformCapabilities: ['EC2'],

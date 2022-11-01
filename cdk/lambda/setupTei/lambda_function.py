@@ -129,10 +129,12 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name,
                         '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
+        # If it is not a batch job, there is only one job - jon number 0
+        placeholder = "#JOB_NUMBER" if batch_execution == "true" and numSlices > 1 else "_0"
         return {
                 'n': objDict['basis_set_instance_size'],
                 'commands': commands,
-                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}#JOB_NUMBER.json",
+                's3_bucket_path': f"s3://{bucket_name}/job_files/{jobid}/json_files/{jobid}_two_electrons_integrals{placeholder}.json",
                 'numSlices': numSlices,
                 'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
                 'batch_execution': batch_execution,

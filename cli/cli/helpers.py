@@ -2,6 +2,7 @@ import boto3
 import json
 from dataclasses import dataclass
 from typing import List
+import os
 
 
 ecs = boto3.client('ecs')
@@ -144,3 +145,55 @@ def get_json_from_bucket(bucket_name, key):
         Key=key
     )
     return json.loads(obj['Body'].read())
+
+# Deletes all files with associated with the jobid
+def delete_files_from_bucket(bucket_name, jobid):
+    objects_tei = s3.list_objects_v2(Bucket=bucket_name, Prefix=jobid)
+    objects_other = s3.list_objects_v2(Bucket=bucket_name, Prefix=f"job_files/{jobid}")
+    objects_args = s3.list_objects_v2(Bucket=bucket_name, Prefix=f"tei_args/{jobid}")
+    if 'Contents' in objects_tei:
+        for obj in objects_tei['Contents']:
+            print(f"Deleting {obj['Key']}")
+            s3.delete_object(Bucket=bucket_name, Key=obj['Key'])
+    if 'Contents' in objects_other:
+        for obj in objects_other['Contents']:
+            print(f"Deleting {obj['Key']}")
+            s3.delete_object(Bucket=bucket_name, Key=obj['Key'])
+    if 'Contents' in objects_args:
+        for obj in objects_args['Contents']:
+            print(f"Deleting {obj['Key']}")
+            s3.delete_object(Bucket=bucket_name, Key=obj['Key'])
+
+# Downloads all files associated with the jobid to the target directory (without / at the end)
+def download_files_from_bucket(bucket_name, jobid, target):
+    directory_name = jobid
+    # Create directories
+    path_to_root = os.path.join(target, directory_name)
+    if not os.path.isdir(path_to_root):
+        os.mkdir(path_to_root)
+    path_to_json = os.path.join(path_to_root, 'json_files')
+    path_to_bin = os.path.join(path_to_root, 'bin_files')
+    if not os.path.isdir(path_to_json):
+        os.mkdir(path_to_json)
+    if not os.path.isdir(path_to_bin):
+        os.mkdir(path_to_bin)
+    objects_tei = s3.list_objects_v2(Bucket=bucket_name, Prefix=jobid)
+    if 'Contents' in objects_tei:
+        for obj in objects_tei['Contents']:
+            print(f"Downloading: {obj['Key']}")
+            s3.download_file(bucket_name, obj['Key'], os.path.join(path_to_root, obj['Key'][get_start_point(obj['Key'],'/'):]))
+    objects_other_bin = s3.list_objects_v2(Bucket=bucket_name, Prefix=f"job_files/{jobid}/bin_files")
+    if 'Contents' in objects_other_bin:
+        for obj in objects_other_bin['Contents']:
+            print(f"Downloading: {obj['Key']}")
+            s3.download_file(bucket_name, obj['Key'], os.path.join(path_to_bin, obj['Key'][get_start_point(obj['Key'],'/'):]))
+    objects_other_json = s3.list_objects_v2(Bucket=bucket_name, Prefix=f"job_files/{jobid}/json_files")
+    if 'Contents' in objects_other_json:
+        for obj in objects_other_json['Contents']:
+            print(f"Downloading: {obj['Key']}")
+            s3.download_file(bucket_name, obj['Key'], os.path.join(path_to_json, obj['Key'][get_start_point(obj['Key'],'/'):]))
+
+def get_start_point(str,substr):
+    if not substr in str:
+        return 0
+    return str.rindex(substr)+1
