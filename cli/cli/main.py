@@ -10,92 +10,28 @@ def cli():
 
 @cli.command()
 @click.option('--xyz', help="URL to xyz file", required=True)
-@click.option('--bucket', help="Bucket for job metadata", required=True)
-@click.option('--basis_set', help="Basis set to be used", required=True)
-def info(xyz, bucket, basis_set):
-    click.echo("Getting resources...")
-    aws_resources = helpers.resolve_resource_config(bucket)
-    click.echo("Starting task info...")
-    job_id = str(uuid.uuid4())
-    path = 'info/' + job_id + '-info.json'
-    response = helpers.run_ecs_task(
-        ["info", "--xyz", xyz, "--basis_set", basis_set],
-        aws_resources.bucket_uri + path,
-        aws_resources
-    )
-
-    click.echo("Started task. Waiting for task to finish...")
-    helpers.wait_for_task(response["tasks"][0]['taskArn'], aws_resources)
-    jsonFile = helpers.get_json_from_bucket(path)
-    print(jsonFile['basis_set_instance_size'])
-
-
-@cli.command()
-@click.option('--xyz', help="URL to xyz file", required=True)
-@click.option('--basis_set', help="Basis set to be used", required=True)
-@click.option('--jobid', help="Unique Job Id", required=True)
-@click.option('--bucket', help="Bucket for job metadata", required=True)
-@click.option('--output_object', help="Object name to write output to", required=False)
-@click.option('--begin', help="Index to begin calculation at", required=False)
-@click.option('--end', help="Index to end calculation at", required=False)
-def two_electrons_integrals(xyz, basis_set, jobid, bucket, output_object, begin, end):
-    click.echo("Getting resources...")
-    aws_resources = helpers.resolve_resource_config(bucket)
-    click.echo("Starting task two_electrons_integrals...")
-    path = 'two_electrons_integrals/' + jobid + '-tei.json'
-    commands = [
-        "two_electrons_integrals",
-        "--xyz", xyz,
-        "--basis_set", basis_set,
-        "--jobid", jobid,
-        "--bucket", bucket,
-        "--output_object", output_object,
-        "--begin", begin,
-        "--end", end
-    ] if output_object else [
-        "two_electrons_integrals",
-        "--xyz", xyz,
-        "--basis_set", basis_set,
-        "--jobid", jobid,
-        "--bucket", bucket
-    ]
-    response = helpers.run_ecs_task(
-        commands,
-        aws_resources.bucket_uri + path,
-        aws_resources
-    )
-    click.echo("Started task. Waiting for task to finish...")
-    helpers.wait_for_task(response["tasks"][0]['taskArn'], aws_resources)
-    jsonFile = helpers.get_json_from_bucket(path)
-    print(jsonFile)
-
-
-@cli.command()
-@click.option('--xyz', help="URL to xyz file", required=True)
 @click.option('--basis_set', help="Basis set to be used", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 @click.option('--num_parts', help="Number of parts to divide the two_electrons_integrals step into", default=None)
 @click.option('--max_iter', help="Maximum number of iterations in the fock-scf loop", default=30)
 @click.option(
     '--batch_execution', help="Enter true to execute of AWS Batch else false (defaults to false)", default="false")
-def execute_state_machine(xyz, basis_set, bucket, num_parts, max_iter, batch_execution):
+@click.option(
+    '--epsilon', help="The difference between the previous and current hartree_fock_energy to mark the end of the loop",
+    default=0.000000001)
+def execute_state_machine(xyz, basis_set, bucket, num_parts, max_iter, batch_execution, epsilon):
     click.echo("Getting resources...")
     aws_resources = helpers.resolve_resource_config(bucket)
     click.echo("Starting state machine execution...")
     job_id = str(uuid.uuid4())
     inputDict = {
-        "commands": [
-            "info",
-            "--xyz",
-            xyz,
-            "--basis_set",
-            basis_set
-        ],
-        "s3_bucket_path": f's3://{bucket}/info/{job_id}.json',
+        "commands": ["info", "--xyz", xyz, "--basis_set", basis_set],
+        "s3_bucket_path": f's3://{bucket}/job_files/{job_id}/json_files/{job_id}_info.json',
         "num_batch_jobs": num_parts,
         "jobid": job_id,
         "batch_execution": batch_execution,
-        "max_iter": max_iter
+        "max_iter": max_iter,
+        "epsilon": epsilon
     }
     helpers.exec_state_machine(input=inputDict, aws_resources=aws_resources, name=job_id)
     print("Job started successfully!")
@@ -168,6 +104,23 @@ def abort_execution(jobid, bucket):
     aws_resources = helpers.resolve_resource_config(bucket)
     helpers.abort_exec(jobid=jobid, aws_resources=aws_resources)
     print(f"Job {jobid} aborted!")
+
+
+@cli.command()
+@click.option('--jobid', help="Id of the job files to delete", required=True)
+@click.option('--bucket', help="Bucket for job metadata", required=True)
+def delete_job_files(jobid, bucket):
+    helpers.delete_files_from_bucket(bucket_name=bucket, jobid=jobid)
+    print("Done!")
+
+
+@cli.command()
+@click.option('--jobid', help="Id of the job files to download", required=True)
+@click.option('--bucket', help="Bucket for job metadata", required=True)
+@click.option('--target', help="Target directory", required=True)
+def download_job_files(jobid, bucket, target):
+    helpers.download_files_from_bucket(bucket_name=bucket, jobid=jobid, target=target)
+    print("Done!")
 
 
 if __name__ == '__main__':

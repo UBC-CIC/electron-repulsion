@@ -82,11 +82,17 @@ def writeArgsToS3(n,jobid,numSlices):
 
 # Find split size so that each input size to batch is approximately 500 MB
 def getNumSlices(n):
-    numIntegrals = n**4
-    # 500 MB = 500,000,000 bytes, 1 integral = 8 bytes, each batch job should have a maximum of 500 MB / 8 B items to work with
-    # MAX_ITEMS = 62,500,000
-    MAX_ITEMS = 62500000
-    return int(math.ceil(numIntegrals/MAX_ITEMS)) # Keeping max less than 500 MB
+    MAX_NUM_VALUES_PER_MATRIX_ELEMENT = 128
+    # Total number of values = numValues = AVG_NUM_VALUES_PER_MATRIX_ELEMENT*n^4
+    numValues = MAX_NUM_VALUES_PER_MATRIX_ELEMENT*n**4
+    # Size of 1 value = 8 bytes
+    # Size of all values total = totalSize = numValues*8
+    totalSize = numValues*8
+    # For a SPLIT_SIZE MB split size
+    SPLIT_SIZE = 512 # In MB
+    # Number of batch jobs = totalSize / (SPLIT_SIZE*1,000,000)
+    numJobs = float(totalSize)/SPLIT_SIZE/1000000
+    return int(math.ceil(numJobs)) # Keeping max less than 500 MB
 
 
 def lambda_handler(event, context):
@@ -123,14 +129,17 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name,
                         '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
+        # If it is not a batch job, there is only one job - job number 0
+        placeholder = "#JOB_NUMBER" if batch_execution == "true" and numSlices > 1 else "_0"
         return {
                 'n': objDict['basis_set_instance_size'],
                 'commands': commands,
-                's3_bucket_path': f"s3://{bucket_name}/two_electrons_integrals/{jobid}#JOB_NUMBER.json",
+                's3_bucket_path': f"s3://{bucket_name}/job_files/{jobid}/json_files/{jobid}_two_electrons_integrals{placeholder}.json",
                 'numSlices': numSlices,
                 'args_path': f"s3://{bucket_name}/tei_args/{jobid}",
                 'batch_execution': batch_execution,
-                'jobid': jobid
+                'jobid': jobid,
+                'epsilon': event['epsilon']
         }
     else:
         raise Exception('Info step failed!')

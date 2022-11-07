@@ -1,7 +1,6 @@
 import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
 import * as cdk from 'aws-cdk-lib';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-//import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -190,7 +189,7 @@ export class CdkStack extends Stack {
     const initializeLoopVariables = new sfn.Pass(this,'initializeLoopVariables',{
       result: sfn.Result.fromObject({
         "loopCount": 1,
-        "hartree_diff": 1
+        "hartree_diff": Number.MAX_VALUE
       }),
       resultPath: "$.loopData"
     });
@@ -286,7 +285,7 @@ export class CdkStack extends Stack {
         image: ecs.ContainerImage.fromEcrRepository(repo,'latest').imageName,
         executionRoleArn: ecsTaskRole.roleArn,
         vcpus: 1,
-        memory: 512
+        memory: 4096
       },
       jobDefinitionName: "batch_job_definition",
       platformCapabilities: ['EC2'],
@@ -321,7 +320,7 @@ export class CdkStack extends Stack {
 
     const loopCondition = sfn.Condition.and(
       sfn.Condition.numberLessThanEqualsJsonPath("$.loopData.loopCount","$.max_iter"),
-      sfn.Condition.numberGreaterThan("$.loopData.hartree_diff",0.000000001)
+      sfn.Condition.numberGreaterThanJsonPath("$.loopData.hartree_diff","$.epsilon")
     );
 
     const batchExecWorkflow = new sfn.Choice(this,'batchExec')
@@ -350,7 +349,8 @@ export class CdkStack extends Stack {
                                   "commands.$": "$[0].commands",
                                   "s3_bucket_path.$": "$[0].s3_bucket_path",
                                   "jobid.$": "$[0].jobid",
-                                  "max_iter.$": "$[0].max_iter"
+                                  "max_iter.$": "$[0].max_iter",
+                                  "epsilon.$": "$[0].epsilon"
                                 }
                                })
                                .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
@@ -469,48 +469,6 @@ export class CdkStack extends Stack {
       value: repo.repositoryUri,
       description: "ECR Repository for this stack, push Docker image here."
     });
-
-
-    /*
-
-    Use if using DynamoDB.
-
-    const database = new dynamodb.Table(this,'testTable',{
-      partitionKey: {name: 'id', type: dynamodb.AttributeType.STRING},
-      sortKey: {name:'email', type: dynamodb.AttributeType.STRING},
-      stream: StreamViewType.NEW_AND_OLD_IMAGES
-    });
-
-    const dynamoReadRole = new iam.Role(this, 'dynamoReadRole', {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role to enable Lambda functions to read from Dynamo streams',
-      managedPolicies: [ManagedPolicy.fromManagedPolicyArn(this,'readDynamo','arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole')]
-    });
-
-    const dynamoWritePolicy = new iam.PolicyDocument({
-      statements: [new iam.PolicyStatement({
-        actions: [
-          "dynamodb:CreateTable",
-          "dynamodb:BatchWriteItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteTable",
-          "dynamodb:UpdateTable",
-        ],
-        effect: iam.Effect.ALLOW,
-        resources: ['*']
-      })]
-    });
-
-    const dynamoWriteRole = new iam.Role(this,'dynamoWriteRole',{
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role to write to dynamoDB',
-      managedPolicies: [ManagedPolicy.fromManagedPolicyArn(this,'lambdaExecutionRole','arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole')],
-      inlinePolicies: {'writeDynamo': dynamoWritePolicy}
-    });
-
-    */
 
   }
 }

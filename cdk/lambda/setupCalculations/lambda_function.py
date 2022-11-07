@@ -29,7 +29,7 @@ def lambda_handler(event, context):
             '--xyz', xyz,
             '--basis_set', basis_set,
             '--bucket', bucket_name,
-            '--output_object', f"{stepName}_bin_files/{jobid}_{stepName}.bin"
+            '--output_object', f"job_files/{jobid}/bin_files/{jobid}_{stepName}.bin"
             ]
 
     elif stepName == 'fock_matrix':
@@ -42,8 +42,8 @@ def lambda_handler(event, context):
                 '--jobid', jobid,
                 '--eri_prefix', jobid,
                 '--bucket', bucket_name,
-                '--density_url', f"s3://{bucket_name}/{density_url_step}_bin_files/{jobid}_{density_url_step}.bin",
-                '--output_object', f"fock_matrix_bin_files/{jobid}_fock_matrix.bin"
+                '--density_url', f"s3://{bucket_name}/job_files/{jobid}/bin_files/{jobid}_{density_url_step}.bin",
+                '--output_object', f"job_files/{jobid}/bin_files/{jobid}_fock_matrix.bin"
             ]
     elif stepName == 'scf_step':
         commands = [
@@ -52,17 +52,18 @@ def lambda_handler(event, context):
                 '--basis_set', basis_set,
                 '--jobid', jobid,
                 '--bucket', bucket_name,
-                '--output_object', f"scf_step_bin_files/{jobid}_scf_step.bin",
-                '--fock_matrix_url', f"s3://{bucket_name}/fock_matrix_bin_files/{jobid}_fock_matrix.bin",
-                '--hamiltonian_url', f"s3://{bucket_name}/core_hamiltonian_bin_files/{jobid}_core_hamiltonian.bin",
-                '--overlap_url', f"s3://{bucket_name}/overlap_bin_files/{jobid}_overlap.bin"
+                '--output_object', f"job_files/{jobid}/bin_files/{jobid}_scf_step.bin",
+                '--fock_matrix_url', f"s3://{bucket_name}/job_files/{jobid}/bin_files/{jobid}_fock_matrix.bin",
+                '--hamiltonian_url', f"s3://{bucket_name}/job_files/{jobid}/bin_files/{jobid}_core_hamiltonian.bin",
+                '--overlap_url', f"s3://{bucket_name}/job_files/{jobid}/bin_files/{jobid}_overlap.bin"
             ]
     return {
         'commands': commands,
-        's3_bucket_path': f"s3://{bucket_name}/{stepName}/{jobid}.json",
+        's3_bucket_path': f"s3://{bucket_name}/job_files/{jobid}/json_files/{jobid}_{stepName}.json",
         'jobid': jobid,
         'max_iter': event['max_iter'],
         'hartree_fock_energy': event['hartree_fock_energy'] if 'hartree_fock_energy' in event else None,
-        'loopData': event['loopData'] if 'loopData' in event else None
+        'loopData': event['loopData'] if 'loopData' in event else None,
+        'epsilon': event['epsilon']
     }
 
