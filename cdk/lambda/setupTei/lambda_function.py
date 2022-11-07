@@ -91,7 +91,7 @@ def getNumSlices(n):
     # For a SPLIT_SIZE MB split size
     SPLIT_SIZE = 512 # In MB
     # Number of batch jobs = totalSize / (SPLIT_SIZE*1,000,000)
-    numJobs = totalSize/SPLIT_SIZE/1000000
+    numJobs = float(totalSize)/SPLIT_SIZE/1000000
     return int(math.ceil(numJobs)) # Keeping max less than 500 MB
 
 
@@ -129,7 +129,7 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name,
                         '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
-        # If it is not a batch job, there is only one job - jon number 0
+        # If it is not a batch job, there is only one job - job number 0
         placeholder = "#JOB_NUMBER" if batch_execution == "true" and numSlices > 1 else "_0"
         return {
                 'n': objDict['basis_set_instance_size'],

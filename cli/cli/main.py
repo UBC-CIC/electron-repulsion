@@ -7,6 +7,7 @@ import cli.helpers as helpers
 def cli():
     pass
 
+
 @cli.command()
 @click.option('--xyz', help="URL to xyz file", required=True)
 @click.option('--basis_set', help="Basis set to be used", required=True)
@@ -24,19 +25,13 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, max_iter, batch_exe
     click.echo("Starting state machine execution...")
     job_id = str(uuid.uuid4())
     inputDict = {
-            "commands": [
-                "info",
-                "--xyz",
-                xyz,
-                "--basis_set",
-                basis_set
-            ],
-            "s3_bucket_path": f's3://{bucket}/job_files/{job_id}/json_files/{job_id}_info.json',
-            "num_batch_jobs": num_parts,
-            "jobid": job_id,
-            "batch_execution": batch_execution,
-            "max_iter": max_iter,
-            "epsilon": epsilon
+        "commands": ["info", "--xyz", xyz, "--basis_set", basis_set],
+        "s3_bucket_path": f's3://{bucket}/job_files/{job_id}/json_files/{job_id}_info.json',
+        "num_batch_jobs": num_parts,
+        "jobid": job_id,
+        "batch_execution": batch_execution,
+        "max_iter": max_iter,
+        "epsilon": epsilon
     }
     helpers.exec_state_machine(input=inputDict, aws_resources=aws_resources, name=job_id)
     print("Job started successfully!")
@@ -110,12 +105,14 @@ def abort_execution(jobid, bucket):
     helpers.abort_exec(jobid=jobid, aws_resources=aws_resources)
     print(f"Job {jobid} aborted!")
 
+
 @cli.command()
 @click.option('--jobid', help="Id of the job files to delete", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 def delete_job_files(jobid, bucket):
     helpers.delete_files_from_bucket(bucket_name=bucket, jobid=jobid)
     print("Done!")
+
 
 @cli.command()
 @click.option('--jobid', help="Id of the job files to download", required=True)
