@@ -5,18 +5,22 @@ import os
 s3 = boto3.client('s3')
 bucket_name = os.environ['ER_S3_BUCKET']
 
+
 def lambda_handler(event, context):
     jobid = event['jobid']
+    loopData = event['loopData']
+    # Getting the recent SCF output (current iteration) from S3
     scf_output_json = s3.get_object(
             Bucket=bucket_name,
-            Key=f"job_files/{jobid}/json_files/{jobid}_scf_step.json"
+            Key=f"job_files/{jobid}/json_files/{jobid}_scf_step_{loopData['loopCount'] - 1}.json"
         )
     scf_output = json.loads(scf_output_json['Body'].read())
     hartree_fock_energy = scf_output['hartree_fock_energy']
+    # Previous value of hartree_diff (used in case of first loop execution else overwritten in the next if block)
     diff = event['loopData']['hartree_diff']
-    if(event['hartree_fock_energy']):
+    if (event['hartree_fock_energy']):
         diff = abs(hartree_fock_energy - event['hartree_fock_energy'])
-    loopData = event['loopData']
+    # Update loopData with new values
     loopData['loopCount'] = loopData['loopCount'] + 1
     loopData['hartree_diff'] = diff
     return {
