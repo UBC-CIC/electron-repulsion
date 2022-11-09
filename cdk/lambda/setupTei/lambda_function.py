@@ -7,17 +7,22 @@ from urllib.parse import urlparse
 s3 = boto3.client('s3')
 bucket_name = os.environ['ER_S3_BUCKET']
 
+# Takes the list of "commands" as input and returns the name of the basis_set
 def get_basis_set(cmds):
     for i in range(len(cmds)):
         if(cmds[i] == '--basis_set'):
-            return cmds[i+1]
+            return cmds[i+1]\
 
+
+# Takes the list of "commands" as input and returns the xyz
 def get_xyz(cmds):
     for i in range(len(cmds)):
         if(cmds[i] == '--xyz'):
             return cmds[i+1]
 
-# Add toAdd to a position of indices, used in creating splits
+
+# Helper function: Add toAdd to a position of indices, used in creating splits
+# Eg: If pos = [0,0,0,0], n = 5, toAdd = 6, then [0,0,1,1] is returned
 def addToPosition(pos,toAdd,n):
     retPos = pos[:] # A copy of original list
     tens = n
@@ -39,19 +44,30 @@ def addToPosition(pos,toAdd,n):
             if retPos[2]>=n:
                 retPos[2] = 0
                 retPos[1]+=1
+                if retPos[1]>=n:
+                    retPos[1] = 0
+                    retPos[0]+=1
         else:
             retPos[3]+=1
             toAdd-=1
             if retPos[3]>=n:
                 retPos[3] = 0
                 retPos[2]+=1
+                if retPos[2]>=n:
+                    retPos[2] = 0
+                    retPos[1]+=1
+                    if retPos[1]>=n:
+                        retPos[1] = 0
+                        retPos[0]+=1
     return retPos
+
 
 def listToString(indices):
     return f"{indices[0]},{indices[1]},{indices[2]},{indices[3]}"
 
 
-# Currently number of slices set to two, returns True if arguments generated successfully, else False
+# Generates arguments (for use by the containers) for the Batch job and sequential job and stores them on S3 as a text file
+# Divides a n * n * n * n matrix into numSlices subtasks for Batch
 def writeArgsToS3(n,jobid,numSlices):
     fileNameSeq = f"seq_args.txt"
     fileNameBatch = f"batch_args.txt"
@@ -78,9 +94,9 @@ def writeArgsToS3(n,jobid,numSlices):
         file.close()
     s3.upload_file('/tmp/'+ fileNameSeq, bucket_name, f"tei_args/{jobid}/{fileNameSeq}")
     s3.upload_file('/tmp/'+ fileNameBatch, bucket_name, f"tei_args/{jobid}/{fileNameBatch}")
-    return True
 
-# Find split size so that each input size to batch is approximately 500 MB
+
+# Find split size so that each input size to batch is approximately 512 MB
 def getNumSlices(n):
     MAX_NUM_VALUES_PER_MATRIX_ELEMENT = 128
     # Total number of values = numValues = AVG_NUM_VALUES_PER_MATRIX_ELEMENT*n^4
@@ -92,7 +108,7 @@ def getNumSlices(n):
     SPLIT_SIZE = 512 # In MB
     # Number of batch jobs = totalSize / (SPLIT_SIZE*1,000,000)
     numJobs = float(totalSize)/SPLIT_SIZE/1000000
-    return int(math.ceil(numJobs)) # Keeping max less than 500 MB
+    return int(math.ceil(numJobs)) # Keeping max less than 512 MB
 
 
 def lambda_handler(event, context):
@@ -111,6 +127,7 @@ def lambda_handler(event, context):
         writeArgsToS3(objDict['basis_set_instance_size'],jobid,numSlices)
         commands = []
         if batch_execution == "true" and numSlices > 1:
+            # Commands for Batch
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -119,6 +136,7 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name
                         ]
         else:
+            # Commands for Sequential
             commands = [
                         'two_electrons_integrals',
                         '--jobid', jobid,
@@ -129,6 +147,8 @@ def lambda_handler(event, context):
                         '--bucket',bucket_name,
                         '--output_object',f"{jobid}_0_0_0_0_{objDict['basis_set_instance_size']}_0_0_0.bin"
                         ]
+        # In case of Batch, the Lambda formats the JSON output as <jobid>_two_electrons_integrals#JOB_NUMBER.json
+        # The #JOB_NUMBER gets replaced in the container shell script by the actual Batch job number (eg. 0,1,2,...)
         # If it is not a batch job, there is only one job - job number 0
         placeholder = "#JOB_NUMBER" if batch_execution == "true" and numSlices > 1 else "_0"
         return {
