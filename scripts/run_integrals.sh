@@ -1,6 +1,7 @@
 #!/bin/bash
-# Both of these must be set for a batch job
+set -ex
 free -h
+# Both of these must be set for a batch job
 if [ ! -z $ARGS_PATH ] && [ ! -z $AWS_BATCH_JOB_ARRAY_INDEX ]
 then
     aws s3 cp $ARGS_PATH/batch_args.txt /args.txt
