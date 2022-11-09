@@ -417,10 +417,21 @@ export class CdkStack extends Stack {
           },
         })
           // Core_hamiltonian, Overlap, Initial_guess and two_electrons_integrals can be run in parallel
-          .branch(modifyInputsCoreHamiltonian.next(setupCoreHamiltonianStep).next(coreHamiltonianStep))
-          .branch(modifyInputsOverlap.next(setupOverlapMatrixStep).next(overlapMatrixStep))
-          .branch(modifyInputsInitialGuess.next(setupInitialGuessStep).next(initialGuessStep))
-          .branch(setupTeiStep.next(batchExecWorkflow))
+          .branch(
+            modifyInputsCoreHamiltonian
+              .next(setupCoreHamiltonianStep)
+              .next(coreHamiltonianStep))
+          .branch(
+            modifyInputsOverlap
+              .next(setupOverlapMatrixStep)
+              .next(overlapMatrixStep))
+          .branch(
+            modifyInputsInitialGuess
+              .next(setupInitialGuessStep)
+              .next(initialGuessStep))
+          .branch(
+            setupTeiStep
+              .next(batchExecWorkflow))
       )
       .next(initializeLoopVariables)
       .next(fockScfLoop);
