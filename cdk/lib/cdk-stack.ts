@@ -93,7 +93,6 @@ export class CdkStack extends Stack {
           },
         ],
         integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-        assignPublicIp: true,
         resultPath: "$.output",
       });
     };
@@ -119,15 +118,31 @@ export class CdkStack extends Stack {
     const bucket = new s3.Bucket(this, "S3Bucket", {
       bucketName: bucketName.valueAsString,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
     });
+
+    const vpc = new ec2.Vpc(this, "vpc", {
+      vpcName: "IntegralsVpc",
+      maxAzs: 1,
+      subnetConfiguration: [
+        {
+          name: "publicSubnet",
+          subnetType: ec2.SubnetType.PUBLIC,
+          cidrMask: 24
+        },
+        {
+          name: "privateSubnet",
+          subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
+          cidrMask: 24
+        }
+      ]
+    })
 
     // The ECS Cluster used to run ECS Fargate instances
     const cluster = new ecs.Cluster(this, "integralsCluster", {
       clusterName: "Integrals-CDK-Cluster",
+      vpc: vpc
     });
-
-    // We will use the same VPC as created by the cluster in the entire stack
-    const vpc = cluster.vpc;
 
     // Simple security group that allows all outbound traffic
     const securityGroup = new ec2.SecurityGroup(this, "securityGroup", {
@@ -316,8 +331,7 @@ export class CdkStack extends Stack {
         minvCpus: 0,
         instanceRole: EcsInstanceProfile.attrArn,
         instanceTypes: ["optimal"],
-        // might need to change this if a manually created VPC is used for the cluster
-        subnets: [vpc.publicSubnets[0].subnetId, vpc.publicSubnets[1].subnetId],
+        subnets: [vpc.privateSubnets[0].subnetId],
         securityGroupIds: [securityGroup.securityGroupId],
       },
     });
