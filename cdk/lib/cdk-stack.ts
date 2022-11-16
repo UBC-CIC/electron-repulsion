@@ -12,6 +12,7 @@ import * as batch from "aws-cdk-lib/aws-batch";
 import { Construct } from "constructs";
 import { ManagedPolicy } from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
+import { BaseVpc } from "./base-vpc"
 
 export class CdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -28,7 +29,7 @@ export class CdkStack extends Stack {
      * name: Name of the Lambda function
      */
     const cdkLambdaFunction = (id: string, codePath: string, name: string): lambda.Function => {
-      return new lambda.Function(this, id, {
+      const func = new lambda.Function(this, id, {
         runtime: lambda.Runtime.PYTHON_3_9,
         handler: "lambda_function.lambda_handler",
         code: lambda.Code.fromAsset(codePath),
@@ -38,8 +39,15 @@ export class CdkStack extends Stack {
         memorySize: 256,
         environment: {
           ER_S3_BUCKET: bucketName.valueAsString,
-        },
+        }
       });
+      func.addPermission(`${name}permission`, {
+        principal: new iam.ServicePrincipal("states.amazonaws.com"),
+        action: "lambda:InvokeFunction",
+        sourceArn: `arn:aws:states:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:stateMachine:IntegralsStateMachine`,
+        sourceAccount: cdk.Stack.of(this).account
+      });
+      return func;
     };
 
     /**
@@ -121,7 +129,7 @@ export class CdkStack extends Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
     });
 
-    const vpc = new ec2.Vpc(this, "vpc", {
+    const vpc = new BaseVpc(this, "vpc", {
       vpcName: "IntegralsVpc",
       maxAzs: 1,
       subnetConfiguration: [
