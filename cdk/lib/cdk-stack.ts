@@ -1,4 +1,4 @@
-import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import * as cdk from "aws-cdk-lib";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -119,6 +119,7 @@ export class CdkStack extends Stack {
     const bucket = new s3.Bucket(this, "S3Bucket", {
       bucketName: bucketName.valueAsString,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true
     });
 
     // The ECS Cluster used to run ECS Fargate instances

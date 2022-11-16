@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pulls the ECR integrals docker image to local
-# USE: ./scripts/pull_image.sh
+# USE: AWS_PROFILE=... ./scripts/pull_image.sh
 
 set -eux
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pushes the local integrals docker image to ECR
-# USE: ./scripts/build_image.sh
+# USE: AWS_PROFILE=... AWS_DEFAULT_REGION=... ./scripts/push_image.sh
 
 set -eux
 
