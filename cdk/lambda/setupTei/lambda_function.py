@@ -64,7 +64,7 @@ def addToPosition(pos, toAdd, n):
 
 
 def listToString(indices):
-    return f"{indices[0]}, {indices[1]}, {indices[2]}, {indices[3]}"
+    return f"{indices[0]},{indices[1]},{indices[2]},{indices[3]}"
 
 
 # Generates arguments (for use by the containers) for the Batch job and sequential
