@@ -77,7 +77,7 @@ In the `cdk` directory, you can execute the following commands to initialize and
     cdk deploy --parameters CdkStack:bucketName=${YOUR_DESIRED_S3_BUCKET_TO_CREATE}
 
 As you pull new versions of our CDK code, you can `cdk synth` and `cdk deploy` at your convenience. If you want to
-tear down your environment, you can run `cdk destroy`.
+tear down your environment, you can run `cdk destroy`. Note that you may have to delete the ECR image manually (or use `scripts/delete_image.sh`). Be warned that destroying the stack will remove the S3 bucket with calculation results!
 
 ### Pushing the integrals image
 
@@ -88,6 +88,11 @@ created. You can do that with
 
 Note that this script assumes the ability to read AWS configuration from environment variables.
 
+There is a shortcut around building if you have access to another account with the image already in it:
+
+    AWS_PROFILE=NAME_OF_THE_SOURCE_ACCOUNT ./scripts/pull_image.sh
+    AWS_PROFILE=NAME_OF_THE_DESTINATION_ACCOUNT AWS_DEFAULT_REGION=ca-central-1 ./scripts/push_image.sh
+
 ## Running with the command line interface
 
 There is a small Python library/application in `cli` that allows you to run and monitor jobs without having
@@ -95,12 +100,17 @@ to know too much about the AWS resources themselves. Its dependencies are manage
 initialize a virtual environment and run the CLI with:
 
     # In the cli dir
+    # Install the dependencies needed to run the CLI
     make venv
+
+    # Or equivalently
+    python3 -m venv .venv
+    .venv/bin/pip install -e .
 
     # Run the CLI
     ./cli.sh --help
 
-    # Equivalent
+    # Or equivalently
     .venv/bin/python -m cli.main --help
 
 See the `Makefile` for other development tasks (such as `make test`).
