@@ -31,7 +31,7 @@ def resolve_resource_config(bucket_name: str) -> ResourceConfig:
     vpcs = ec2.describe_vpcs(Filters=[
         {
             'Name': 'tag:Name',
-            'Values': ['CdkStack/integralsCluster/Vpc']
+            'Values': ['IntegralsVpc']
         }
     ])
     vpcId = vpcs['Vpcs'][0]['VpcId']
