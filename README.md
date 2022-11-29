@@ -1,6 +1,34 @@
 # electron-repulsion
 
-Orchestration for calculating election repulsion integrals in the cloud
+Orchestration for calculating electron repulsion integrals in the cloud
+
+| Index                                                 | Description                                               |
+|:------------------------------------------------------|:----------------------------------------------------------|
+| [High Level Architecture](#High-Level-Architecture)   | Architecture of the system                                |
+| [Deployment](#deployment)                             | How to deploy the system                                  |
+| [User Guide](#User-Guide)                             | Running and managing jobs                                 |
+| [Changelog](#Changelog)                               | Any changes post publish                                  |
+| [License](#License)                                   | License details                                           |
+
+## High Level Architecture
+
+X
+
+## Deployment
+
+X
+
+## User Guide
+
+X
+
+## Changelog
+
+X
+
+## License
+
+X
 
 ## Development
 
@@ -14,7 +42,7 @@ There are three main components in this library:
 2. AWS CDK definitions in `cdk` for deploying and managing AWS resources
 3. A command line library in `cli` for managing data and process on AWS
 
-## Deploying
+## Deployment
 
 There are a few automated steps to deploying the solution to your AWS environment
 
