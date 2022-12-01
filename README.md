@@ -30,7 +30,7 @@ X
 
 # Changelog
 
-X
+N/A
 
 # License
 
