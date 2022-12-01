@@ -1,6 +1,7 @@
 import click
 import uuid
 import cli.helpers as helpers
+import json
 
 
 @click.group()
@@ -54,6 +55,8 @@ def get_status(jobid, bucket):
         time = events[0]['timestamp']
         time = time.strftime("%m/%d/%Y %H:%M:%S")
         print(f"Execution completed successfully at: {time}")
+        job_output = json.loads(events[0]['executionSucceededEventDetails']['output'])
+        print(f"Final value of hartree_fock_energy: {job_output['hartree_fock_energy']}")
 
     # If Execution Failed
     elif status == 'FAILED':
@@ -114,7 +117,7 @@ def delete_job_files(jobid, bucket):
     print("Done!")
 
 
-@cli.command(help="download all files related to a job from S3")
+@cli.command(help="Download all files related to a job from S3")
 @click.option('--jobid', help="Id of the job files to download", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 @click.option('--target', help="Target directory", required=True)

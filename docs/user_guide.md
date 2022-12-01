@@ -24,7 +24,7 @@ This tables gives a summary of all things you can do with the CLI:
 |  abort-execution | Aborts execution of a recent job. You can specify the job you want to abort using the job id. | `./cli.sh abort-execution --jobid 12345abcd --bucket integrals-bucket` |
 | download-job-files | Downloads all files related to a given job from the S3 bucket to the user's local computer. You need to specify the absolute path of the target directory where you want the downlaod the files to. | `./cli.sh download-job-files --jobid 12345abcd --bucket integrals-bucket --target /path/to/target` |
 | delete-job-files | Deletes all files related to a given job from the S3 bucket | `./cli.sh delete-job-files --jobid 12345abcd --bucket integrals-bucket` |
-| get-status | Get status of a recent job. If the status is RUNNING, get the name of the current state. If the status is FAILED, gives the reason for failure. | `./cli.sh get-status --jobid 12345abcd --bucket integrals-bucket` |
+| get-status | Get status of a recent job. If the status is RUNNING, get the name of the current state. If the status is FAILED, gives the reason for failure, if the status is SUCCEEDED, gives the final value for the hartree_fock_energy. | `./cli.sh get-status --jobid 12345abcd --bucket integrals-bucket` |
 | get-execution-list | List recent jobs by job id and status (RUNNING, FAILED, SUCCEEDED, OR ABORTED) | `./cli.sh get-execution-list --bucket integrals-bucket` |
 
 
