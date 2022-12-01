@@ -12,7 +12,13 @@ Orchestration for calculating electron repulsion integrals in the cloud
 
 ## High Level Architecture
 
-X
+The overall cloud architecture can be summarized as follows.
+
+![Architecture1](docs/images/overall_arch.png)
+
+The next image shows the step function workflow that runs calculations.
+
+![Architecture2](docs/images/step_functions_arch.png)
 
 ## Deployment
 
@@ -28,7 +34,7 @@ X
 
 ## License
 
-X
+This project is distributed under the [MIT License](LICENSE).
 
 ## Development
 
