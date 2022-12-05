@@ -26,7 +26,7 @@ To deploy this solution, please follow our [Deployment Guide](docs/deployment.md
 
 # User Guide
 
-X
+For instructions about using the solution, visit the [User Guide](docs/user_guide.md).
 
 # Changelog
 
