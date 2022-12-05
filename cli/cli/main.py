@@ -1,6 +1,7 @@
 import click
 import uuid
 import cli.helpers as helpers
+import json
 
 
 @click.group()
@@ -8,7 +9,7 @@ def cli():
     pass
 
 
-@cli.command()
+@cli.command(help="Execute a calculation on the AWS Step Functions")
 @click.option('--xyz', help="URL to xyz file", required=True)
 @click.option('--basis_set', help="Basis set to be used", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
@@ -38,7 +39,7 @@ def execute_state_machine(xyz, basis_set, bucket, num_parts, max_iter, batch_exe
     print(f"Job Id: {job_id}")
 
 
-@cli.command()
+@cli.command(help="Get status of a recent job using the job id")
 @click.option('--jobid', help="Id of the job to check status of", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 def get_status(jobid, bucket):
@@ -54,6 +55,8 @@ def get_status(jobid, bucket):
         time = events[0]['timestamp']
         time = time.strftime("%m/%d/%Y %H:%M:%S")
         print(f"Execution completed successfully at: {time}")
+        job_output = json.loads(events[0]['executionSucceededEventDetails']['output'])
+        print(f"Final value of hartree_fock_energy: {job_output['hartree_fock_energy']}")
 
     # If Execution Failed
     elif status == 'FAILED':
@@ -86,7 +89,7 @@ def get_status(jobid, bucket):
         print(f"Job was aborted at: {time}")
 
 
-@cli.command()
+@cli.command(help="Get a list of all recent jobs' ids")
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 def get_execution_list(bucket):
     click.echo("Getting resources...")
@@ -96,7 +99,7 @@ def get_execution_list(bucket):
         print(f"{exec['executionArn'].split(':')[-1]} - {exec['status']}")
 
 
-@cli.command()
+@cli.command(help="Abort a running job")
 @click.option('--jobid', help="Id of the job to abort", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 def abort_execution(jobid, bucket):
@@ -106,7 +109,7 @@ def abort_execution(jobid, bucket):
     print(f"Job {jobid} aborted!")
 
 
-@cli.command()
+@cli.command(help="Delete all files related to a job from S3")
 @click.option('--jobid', help="Id of the job files to delete", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 def delete_job_files(jobid, bucket):
@@ -114,7 +117,7 @@ def delete_job_files(jobid, bucket):
     print("Done!")
 
 
-@cli.command()
+@cli.command(help="Download all files related to a job from S3")
 @click.option('--jobid', help="Id of the job files to download", required=True)
 @click.option('--bucket', help="Bucket for job metadata", required=True)
 @click.option('--target', help="Target directory", required=True)
