@@ -20,7 +20,7 @@ This tables gives a summary of all things you can do with the CLI:
 
 |   Command    |        About         |          Example           |
 |   :----     |        :----        |          :----         |
-| execute-state-machine | Starts a calculation, given a set of input parameters | `./cli.sh execute-state-machine --xyz https://raw.githubusercontent.com/urysegal/xyzfiles/main/h2o.xyz --basis_set sto-3g --bucket integrals-bucket --batch_execution true --epsilon 0.01 --max_iter 35` |
+| execute-state-machine | Starts a calculation, given a set of input parameters | `./cli.sh execute-state-machine --xyz https://link/to/xyz/file.xyz --basis_set sto-3g --bucket integrals-bucket --batch_execution true --epsilon 0.01 --max_iter 35` |
 |  abort-execution | Aborts execution of a recent job. You can specify the job you want to abort using the job id. | `./cli.sh abort-execution --jobid 12345abcd --bucket integrals-bucket` |
 | download-job-files | Downloads all files related to a given job from the S3 bucket to the user's local computer. You need to specify the absolute path of the target directory where you want the downlaod the files to. | `./cli.sh download-job-files --jobid 12345abcd --bucket integrals-bucket --target /path/to/target` |
 | delete-job-files | Deletes all files related to a given job from the S3 bucket | `./cli.sh delete-job-files --jobid 12345abcd --bucket integrals-bucket` |
