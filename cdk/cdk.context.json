@@ -1,0 +1,8 @@
+{
+  "availability-zones:account=808031297437:region=ca-central-1": [
+    "ca-central-1a",
+    "ca-central-1b",
+    "ca-central-1d"
+  ],
+  "ami:account=808031297437:filters.image-type.0=machine:filters.name.0=amzn2-ami-ecs-hvm-2.0.20221025-x86_64-ebs:filters.state.0=available:region=ca-central-1": "ami-020b0310a36aff463"
+}

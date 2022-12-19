@@ -28,12 +28,12 @@ export class CdkStack extends Stack {
      * codePath: Path to the lambda_function code
      * name: Name of the Lambda function
      */
-    const cdkLambdaFunction = (id: string, codePath: string, name: string): lambda.Function => {
+    const cdkLambdaFunction = (id: string, codePath: string, name: string, role: iam.Role): lambda.Function => {
       const func = new lambda.Function(this, id, {
         runtime: lambda.Runtime.PYTHON_3_9,
         handler: "lambda_function.lambda_handler",
         code: lambda.Code.fromAsset(codePath),
-        role: setupLambdaRole,
+        role: role,
         functionName: name,
         timeout: cdk.Duration.seconds(20),
         memorySize: 256,
@@ -194,6 +194,57 @@ export class CdkStack extends Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "electron-repulsion" }),
     });
 
+    // BasicLambdaExecution policy to add to the setupLambdaRole and runEC2LambdaRole
+    const basicLambdaExecution = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      resources: [`arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*`],
+    });
+
+    /**
+     * EC2 Provisioning Logic
+     */
+
+    // EC2 AMI
+    const ec2Ami = new ec2.LookupMachineImage({
+      name: "amzn2-ami-ecs-hvm-2.0.20221025-x86_64-ebs"
+    });
+
+    // Lambda role allowing running EC2 instances
+    const runEC2LambdaRole = new iam.Role(this, "runEC2LambdaRole", {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      description: "Role to allow running EC2 instances from a Lambda",
+      roleName: "runEC2LambdaRole"
+    });
+
+    runEC2LambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: ['*'],
+        actions: [
+          "iam:GetRole",
+          "iam:PassRole",
+          "ec2:RunInstances"
+        ]
+      })
+    )
+
+    // Lambda function to run an EC2 instance (non-blocking)
+    const runEC2Lambda = cdkLambdaFunction(
+      "runEC2Lambda",
+      "./lambda/runEC2/",
+      "runEC2",
+      runEC2LambdaRole);
+
+    runEC2Lambda.addEnvironment("SUBNET_ID", vpc.privateSubnets[0].subnetId);
+    runEC2Lambda.addEnvironment("CLUSTER_NAME", cluster.clusterName);
+    runEC2Lambda.addEnvironment("IMAGE_ID", ec2Ami.getImage(this).imageId);
+    runEC2Lambda.addEnvironment("SECURITY_GROUP_ID",
+    new ec2.SecurityGroup(this, "SG", {
+      allowAllOutbound: true,
+      vpc: vpc
+    }).securityGroupId);
+
     /**
      * STATE MACHINE
      */
@@ -211,33 +262,61 @@ export class CdkStack extends Stack {
       roleName: "setupLambdaRole",
     });
 
-    // BasicLambdaExecution policy to add to the setupLambdaRole
-    const basicLambdaExecution = new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-      resources: [`arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:*`],
-    });
-
     setupLambdaRole.addToPolicy(basicLambdaExecution);
 
     // Lambda function to setup the two_electrons_integrals step
-    const setupTeiLambda = cdkLambdaFunction("setupTEILambda", "./lambda/setupTei/", "setupTei");
+    const setupTeiLambda = cdkLambdaFunction("setupTEILambda", "./lambda/setupTei/", "setupTei", setupLambdaRole);
 
     // One Lambda function that sets up all other calculations
     const setupCalculationsLambda = cdkLambdaFunction(
       "setupCalculationsLambda",
       "./lambda/setupCalculations/",
-      "setupCalculations"
+      "setupCalculations",
+      setupLambdaRole
     );
 
     // Lambda function to update the variables that determine whether the Fock-SCF loop must continue
     const updateLoopVariablesLambda = cdkLambdaFunction(
       "updateLoopVariablesLambda",
       "./lambda/updateLoopVariables/",
-      "updateLoopVariables"
+      "updateLoopVariables",
+      setupLambdaRole
     );
 
+    // ECS API call to list container instances
+    const listContainerInstancesStep = new tasks.CallAwsService(this, "listContainerInstances", {
+      service: "ecs",
+      action: "ListContainerInstances",
+      iamResources: [ "ecs:ListContainerInstances" ],
+      resultPath: "$.output",
+      parameters: {
+        "Cluster": cluster.clusterName,
+        "Filter": "$.instance_filter"
+      }
+    });
+
+    const terminateInstancesStepSuccess = new tasks.CallAwsService(this, "terminateInstancesSuccess", {
+      service: "ec2",
+      action: "TerminateInstances",
+      iamResources: [ "ec2:TerminateInstances" ],
+      resultPath: "$.output",
+      parameters: {
+        "InstanceIds": "$.instance_id"
+      }
+    });
+
+    const terminateInstancesStepFailure = new tasks.CallAwsService(this, "terminateInstancesFailure", {
+      service: "ec2",
+      action: "TerminateInstances",
+      iamResources: [ "ec2:TerminateInstances" ],
+      resultPath: "$.output",
+      parameters: {
+        "InstanceIds": "$.instance_id"
+      }
+    });
+
     // Creating LambdaInvoke steps for all Lambda functions
+    const runEC2Step = cdkLambdaInvokeSfn("runEC2Step", runEC2Lambda);
     const setupTeiStep = cdkLambdaInvokeSfn("setupTeiStep", setupTeiLambda);
     const setupCoreHamiltonianStep = cdkLambdaInvokeSfn("setupCoreHamiltonianStep", setupCalculationsLambda);
     const setupOverlapMatrixStep = cdkLambdaInvokeSfn("setupOverlapMatrixStep", setupCalculationsLambda);
@@ -425,39 +504,67 @@ export class CdkStack extends Stack {
       .next(fockScfLoop);
 
     // Check condition
-    fockScfLoop.when(loopCondition, loopBody).otherwise(new sfn.Succeed(this, "Success"));
+    fockScfLoop.when(loopCondition, loopBody).otherwise(
+      terminateInstancesStepSuccess.next(
+      new sfn.Succeed(this, "Success"))
+    );
 
-    const stepFuncDefinition = integralsInfoStep
+    const postInstanceSetupStateMachine = integralsInfoStep.next(
+      // take outputs from the first parallel step and pass to next
+      new sfn.Parallel(this, "parallelExec", {
+        resultSelector: {
+          "commands.$": "$[0].commands",
+          "s3_bucket_path.$": "$[0].s3_bucket_path",
+          "jobid.$": "$[0].jobid",
+          "max_iter.$": "$[0].max_iter",
+          "epsilon.$": "$[0].epsilon",
+        },
+      })
+        // Core_hamiltonian, Overlap, Initial_guess and two_electrons_integrals can be run in parallel
+        .branch(
+          modifyInputsCoreHamiltonian
+            .next(setupCoreHamiltonianStep)
+            .next(coreHamiltonianStep))
+        .branch(
+          modifyInputsOverlap
+            .next(setupOverlapMatrixStep)
+            .next(overlapMatrixStep))
+        .branch(
+          modifyInputsInitialGuess
+            .next(setupInitialGuessStep)
+            .next(initialGuessStep))
+        .branch(
+          setupTeiStep
+            .next(batchExecWorkflow))
+    )
+    .next(initializeLoopVariables)
+    .next(fockScfLoop);
+
+    const tryBlock = new sfn.Parallel(this, "TryBlock", {
+      resultSelector : {
+        "commands.$": "$[0].commands",
+        "s3_bucket_path.$": "$[0].s3_bucket_path",
+        "jobid.$": "$[0].jobid",
+        "max_iter.$": "$[0].max_iter",
+        "epsilon.$": "$[0].epsilon",
+        "hartree_fock_energy.$": "$[0].hartree_fock_energy",
+        "loopData.$": "$[0].loopData",
+        "instance_id.$": "$[0].instance_id"
+      }
+    });
+
+    tryBlock.addCatch(terminateInstancesStepFailure.next(
+      new sfn.Fail(this, "Fail")
+    ));
+
+    const stepFuncDefinition = runEC2Step
+      .next(listContainerInstancesStep)
       .next(
-        // take outputs from the first parallel step and pass to next
-        new sfn.Parallel(this, "parallelExec", {
-          resultSelector: {
-            "commands.$": "$[0].commands",
-            "s3_bucket_path.$": "$[0].s3_bucket_path",
-            "jobid.$": "$[0].jobid",
-            "max_iter.$": "$[0].max_iter",
-            "epsilon.$": "$[0].epsilon",
-          },
-        })
-          // Core_hamiltonian, Overlap, Initial_guess and two_electrons_integrals can be run in parallel
-          .branch(
-            modifyInputsCoreHamiltonian
-              .next(setupCoreHamiltonianStep)
-              .next(coreHamiltonianStep))
-          .branch(
-            modifyInputsOverlap
-              .next(setupOverlapMatrixStep)
-              .next(overlapMatrixStep))
-          .branch(
-            modifyInputsInitialGuess
-              .next(setupInitialGuessStep)
-              .next(initialGuessStep))
-          .branch(
-            setupTeiStep
-              .next(batchExecWorkflow))
+        new sfn.Choice(this, "instanceStatusCheck")
+          .when(sfn.Condition.isNotPresent("$.output.ContainerInstanceArns[0]"),
+          new sfn.Wait(this, "Wait", {time: sfn.WaitTime.duration(cdk.Duration.seconds(5))}))
+          .otherwise(tryBlock.branch(postInstanceSetupStateMachine))
       )
-      .next(initializeLoopVariables)
-      .next(fockScfLoop);
 
     // State Machine Role
     const stateMachineRole = new iam.Role(this, "SMRole", {
