@@ -82,11 +82,18 @@ export class CdkStack extends Stack {
      * CDK Helper Function - Returns a default configuration ECSRunTask step for use in the step function,
      * uses the containerDefinition containerDef created in this CDK stack
      * id: CDK Id of the resource
+     * launchType: Choose EC2 (run on the EC2 instance created in current job execution) or Fargate
      */
-    const cdkEcsRunTaskSfn = (id: string): tasks.EcsRunTask => {
+    const cdkEcsRunTaskSfn = (id: string, launchType: string): tasks.EcsRunTask => {
       return new tasks.EcsRunTask(this, id, {
         cluster: cluster,
-        launchTarget: new tasks.EcsFargateLaunchTarget(),
+        launchTarget: launchType == "EC2" ? 
+          new tasks.EcsEc2LaunchTarget({
+            placementConstraints: [
+              ecs.PlacementConstraint.memberOf(sfn.JsonPath.stringAt("$.instance_filter"))
+            ]
+          }) : 
+          new tasks.EcsFargateLaunchTarget(),
         taskDefinition: ecsTask,
         containerOverrides: [
           {
@@ -153,6 +160,14 @@ export class CdkStack extends Stack {
       vpc: vpc
     });
 
+    // CDK requires a capacity provider to be added to use the EC2 Launch Type
+    cluster.addCapacity('DefaultAutoScalingGroup', {
+      instanceType: new ec2.InstanceType('t2.micro'),
+      minCapacity: 0,
+      maxCapacity: 0,
+      desiredCapacity: 0
+    });
+
     // Simple security group that allows all outbound traffic
     const securityGroup = new ec2.SecurityGroup(this, "securityGroup", {
       allowAllOutbound: true,
@@ -176,11 +191,11 @@ export class CdkStack extends Stack {
 
     // Task definition for all ECS tasks. Change the cpu and memoryMiB to change the resource availability of each Fargate task
     const ecsTask = new ecs.TaskDefinition(this, "ecsTask", {
-      compatibility: ecs.Compatibility.FARGATE,
+      compatibility: ecs.Compatibility.EC2_AND_FARGATE,
       executionRole: ecsTaskRole,
       taskRole: ecsTaskRole,
       cpu: "1024",
-      memoryMiB: "4096",
+      memoryMiB: "8192", // For testing purposes, change to allocate more memory to containers
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
       },
@@ -191,6 +206,7 @@ export class CdkStack extends Stack {
     const containerDef = ecsTask.addContainer("container", {
       image: ecs.ContainerImage.fromEcrRepository(repo, "latest"),
       containerName: "integralsExecution",
+      memoryLimitMiB: 8192, // For testing purposes, change to allocate more memory to containers
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "electron-repulsion" }),
     });
 
@@ -250,7 +266,7 @@ export class CdkStack extends Stack {
      */
 
     // Info step
-    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo");
+    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo", "EC2");
 
     // Role for Lambda functions (includes S3 access)
     const setupLambdaRole = new iam.Role(this, "setupLambdaRole", {
@@ -286,32 +302,34 @@ export class CdkStack extends Stack {
     // ECS API call to list container instances
     const listContainerInstancesStep = new tasks.CallAwsService(this, "listContainerInstances", {
       service: "ecs",
-      action: "ListContainerInstances",
-      iamResources: [ "ecs:ListContainerInstances" ],
+      action: "listContainerInstances",
+      iamResources: [ "*" ],
       resultPath: "$.output",
       parameters: {
         "Cluster": cluster.clusterName,
-        "Filter": "$.instance_filter"
+        "Filter.$": "$.instance_filter"
       }
     });
 
+    // This is executed if previous steps succeed
     const terminateInstancesStepSuccess = new tasks.CallAwsService(this, "terminateInstancesSuccess", {
       service: "ec2",
-      action: "TerminateInstances",
-      iamResources: [ "ec2:TerminateInstances" ],
+      action: "terminateInstances",
+      iamResources: [ "*" ],
       resultPath: "$.output",
       parameters: {
-        "InstanceIds": "$.instance_id"
+        "InstanceIds.$": "$.instance_id"
       }
     });
 
+    // This is executed if previous steps fail
     const terminateInstancesStepFailure = new tasks.CallAwsService(this, "terminateInstancesFailure", {
       service: "ec2",
-      action: "TerminateInstances",
-      iamResources: [ "ec2:TerminateInstances" ],
+      action: "terminateInstances",
+      iamResources: [ "*" ],
       resultPath: "$.output",
       parameters: {
-        "InstanceIds": "$.instance_id"
+        "InstanceIds.$": "$.instance_id"
       }
     });
 
@@ -343,22 +361,22 @@ export class CdkStack extends Stack {
     });
 
     // Core Hamiltonian parallel step
-    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep");
+    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep", "FARGATE");
 
     // Overlap Matrix parallel step
-    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep");
+    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep", "FARGATE");
 
     // Initial Guess parallel step
-    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep");
+    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep", "FARGATE");
 
     // Sequential way to run two_electrons_integrals step
-    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI");
+    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI", "FARGATE");
 
     // Fock Matrix step
-    const fockMatrixStep = cdkEcsRunTaskSfn("fockMatrixStep");
+    const fockMatrixStep = cdkEcsRunTaskSfn("fockMatrixStep", "EC2");
 
     // Scf Step
-    const scfStep = cdkEcsRunTaskSfn("scfStep");
+    const scfStep = cdkEcsRunTaskSfn("scfStep", "EC2");
 
     // AWS Batch way of running two_electrons_integrals step (including Batch setup)
 
@@ -518,6 +536,8 @@ export class CdkStack extends Stack {
           "jobid.$": "$[0].jobid",
           "max_iter.$": "$[0].max_iter",
           "epsilon.$": "$[0].epsilon",
+          "instance_id.$": "$[0].instance_id",
+          "instance_filter.$": "$[0].instance_filter"
         },
       })
         // Core_hamiltonian, Overlap, Initial_guess and two_electrons_integrals can be run in parallel
@@ -540,6 +560,7 @@ export class CdkStack extends Stack {
     .next(initializeLoopVariables)
     .next(fockScfLoop);
 
+    // Using a single-branch parallel block to act as a try block
     const tryBlock = new sfn.Parallel(this, "TryBlock", {
       resultSelector : {
         "commands.$": "$[0].commands",
@@ -549,20 +570,23 @@ export class CdkStack extends Stack {
         "epsilon.$": "$[0].epsilon",
         "hartree_fock_energy.$": "$[0].hartree_fock_energy",
         "loopData.$": "$[0].loopData",
-        "instance_id.$": "$[0].instance_id"
+        "instance_id.$": "$[0].instance_id",
+        "instance_filter.$": "$[0].instance_filter"
       }
     });
 
     tryBlock.addCatch(terminateInstancesStepFailure.next(
       new sfn.Fail(this, "Fail")
-    ));
+    ), {
+      resultPath: "$.error"
+    });
 
     const stepFuncDefinition = runEC2Step
       .next(listContainerInstancesStep)
       .next(
         new sfn.Choice(this, "instanceStatusCheck")
           .when(sfn.Condition.isNotPresent("$.output.ContainerInstanceArns[0]"),
-          new sfn.Wait(this, "Wait", {time: sfn.WaitTime.duration(cdk.Duration.seconds(5))}))
+          new sfn.Wait(this, "Wait", {time: sfn.WaitTime.duration(cdk.Duration.seconds(5))}).next(listContainerInstancesStep))
           .otherwise(tryBlock.branch(postInstanceSetupStateMachine))
       )
 

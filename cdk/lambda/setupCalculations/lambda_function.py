@@ -90,5 +90,7 @@ def lambda_handler(event, context):
         'max_iter': event['max_iter'],
         'hartree_fock_energy': event['hartree_fock_energy'] if 'hartree_fock_energy' in event else None,
         'loopData': event['loopData'] if 'loopData' in event else None,
-        'epsilon': event['epsilon']
+        'epsilon': event['epsilon'],
+        'instance_id': event['instance_id'],
+        'instance_filter': event['instance_filter']
     }

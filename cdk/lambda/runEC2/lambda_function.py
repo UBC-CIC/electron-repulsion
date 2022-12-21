@@ -1,5 +1,7 @@
 import boto3
 import os
+
+# Resource names stored as environment variables
 ec2 = boto3.client('ec2')
 subnet_id = os.environ['SUBNET_ID']
 cluster_name = os.environ['CLUSTER_NAME']
@@ -7,14 +9,15 @@ image_id = os.environ['IMAGE_ID']
 security_group_id = os.environ['SECURITY_GROUP_ID']
 
 def lambda_handler(event, context):
+    aws_account_id = context.invoked_function_arn.split(":")[4]
     response = ec2.run_instances(
         MaxCount=1,
         MinCount=1,
-        InstanceType="t3.medium",
+        InstanceType="t3.xlarge", # for testing purposes only, move to a worse instance type to lower costs
         SubnetId=subnet_id,
         ImageId=image_id,
         IamInstanceProfile={
-            "Arn": "arn:aws:iam::808031297437:instance-profile/ecsInstanceRole"
+            "Arn": f"arn:aws:iam::{aws_account_id}:instance-profile/ecsInstanceRole" # Assuming it is already present in the account
         },
         SecurityGroupIds=[
             security_group_id
@@ -30,6 +33,6 @@ def lambda_handler(event, context):
         'batch_execution': event['batch_execution'],
         'max_iter': event['max_iter'],
         'epsilon': event['epsilon'],
-        'instance_id': instance_id,
+        'instance_id': [instance_id],
         'instance_filter': f"ec2InstanceId=={instance_id}"
     }

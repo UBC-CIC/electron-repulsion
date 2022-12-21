@@ -30,5 +30,7 @@ def lambda_handler(event, context):
         'commands': event['commands'],
         'hartree_fock_energy': hartree_fock_energy,
         'loopData': loopData,
-        'epsilon': event['epsilon']
+        'epsilon': event['epsilon'],
+        'instance_id': event['instance_id'],
+        'instance_filter': event['instance_filter']
     }
