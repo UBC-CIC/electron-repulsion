@@ -19,15 +19,15 @@ Before you deploy, you must have the following in place:
 2. Open the terminal (or command prompt on Windows) and `cd` into the above folder.
 3. Clone this github repository by entering the following:
 ```bash
-git clone https://github.com/UBC-CIC/electron-repulsion.git
+git clone https://github.com/UBC-CIC/electron-repulsion.git --recurse-submodules
 ```
 4. Navigate into the electron-repulsion folder by running the following command:
 ```bash
 cd electron-repulsion
 ```
-5. Since this repository uses git submodules, you must run this command after cloning:
+5. Run this command if you want to update the submodule to the latest commit in the integrals repository. Note that the latest commit may or may not be compatible with the CDK in this repository:
 ```bash
-git submodule update --init
+git submodule update --remote
 ```
 
 # Step 2: Building The Image
