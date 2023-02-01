@@ -5,4 +5,4 @@
 
 set -eux
 
-docker build . -t integrals:latest
+docker buildx build --platform linux/amd64 . -t integrals:latest
