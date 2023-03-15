@@ -12,7 +12,7 @@ Orchestration for calculating electron repulsion integrals in the cloud
 
 # High Level Architecture
 
-The overall cloud architecture can be summarized as follows.
+The overall cloud architecture can be summarized as follows. For an in-depth explanation of the frontend and backend stacks, refer to the [Architecture Deep Dive](docs/architecture.md).
 
 ![Architecture1](docs/images/overall_arch.png)
 
