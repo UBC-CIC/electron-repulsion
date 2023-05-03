@@ -1,4 +1,4 @@
-import { CfnOutput, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Stack, StackProps, Duration } from "aws-cdk-lib";
 import * as cdk from "aws-cdk-lib";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -8,13 +8,14 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as sfn from "aws-cdk-lib/aws-stepfunctions";
 import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as batch from "aws-cdk-lib/aws-batch";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { ManagedPolicy } from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
-import { BaseVpc } from "./base-vpc"
+import { BaseVpc } from "./base-vpc";
 
-export class CdkStack extends Stack {
+export class IntegralsStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
@@ -39,8 +40,12 @@ export class CdkStack extends Stack {
         memorySize: 256,
         environment: {
           ER_S3_BUCKET: bucketName.valueAsString,
+          TASK_QUEUE: taskQueue.queueUrl,
+          BATCH_TABLE: batchTable.tableName,
         }
       });
+      taskQueue.grantSendMessages(func);
+      batchTable.grantWriteData(func);
       func.addPermission(`${name}permission`, {
         principal: new iam.ServicePrincipal("states.amazonaws.com"),
         action: "lambda:InvokeFunction",
@@ -79,33 +84,6 @@ export class CdkStack extends Stack {
     };
 
     /**
-     * CDK Helper Function - Returns a default configuration ECSRunTask step for use in the step function,
-     * uses the containerDefinition containerDef created in this CDK stack
-     * id: CDK Id of the resource
-     */
-    const cdkEcsRunTaskSfn = (id: string): tasks.EcsRunTask => {
-      return new tasks.EcsRunTask(this, id, {
-        cluster: cluster,
-        launchTarget: new tasks.EcsFargateLaunchTarget(),
-        taskDefinition: ecsTask,
-        containerOverrides: [
-          {
-            containerDefinition: containerDef,
-            command: sfn.JsonPath.listAt("$.commands"),
-            environment: [
-              {
-                name: "JSON_OUTPUT_PATH",
-                value: sfn.JsonPath.stringAt("$.s3_bucket_path"),
-              },
-            ],
-          },
-        ],
-        integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-        resultPath: "$.output",
-      });
-    };
-
-    /**
      * Stack code
      */
 
@@ -128,6 +106,17 @@ export class CdkStack extends Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
+    });
+
+    // The queue used for the integrals tasks
+    const taskQueue = new sqs.Queue(this, 'TaskQueue', {
+      visibilityTimeout: Duration.hours(2),
+    });
+
+    const batchTable = new dynamodb.Table(this, 'BatchTable', {
+      partitionKey: { name: 'jobid', type: dynamodb.AttributeType.STRING },
+      tableName: 'IntegralsBatchTable',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const vpc = new BaseVpc(this, "vpc", {
@@ -171,6 +160,9 @@ export class CdkStack extends Stack {
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
         ),
         ManagedPolicy.fromManagedPolicyArn(this, "ecsBucketPolicy", "arn:aws:iam::aws:policy/AmazonS3FullAccess"),
+        ManagedPolicy.fromManagedPolicyArn(this, "ecsSFNPolicy", "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"),
+        ManagedPolicy.fromManagedPolicyArn(this, "ecsSQSPolicy", "arn:aws:iam::aws:policy/AmazonSQSFullAccess"),
+        ManagedPolicy.fromManagedPolicyArn(this, "ecsDynamoDBPolicy", "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"),
       ],
     });
 
@@ -179,12 +171,19 @@ export class CdkStack extends Stack {
       compatibility: ecs.Compatibility.FARGATE,
       executionRole: ecsTaskRole,
       taskRole: ecsTaskRole,
-      cpu: "1024",
-      memoryMiB: "4096",
+      cpu: "2048",
+      memoryMiB: "16384",
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
       },
       family: "IntegralsTaskDefinition",
+    });
+
+    const ecsService = new ecs.FargateService(this, "ecsService", {
+      cluster: cluster,
+      serviceName: "Integrals-Service",
+      taskDefinition: ecsTask,
+      desiredCount: 0,
     });
 
     // Container definition for each task, uses the latest image in the ECR repository
@@ -192,14 +191,14 @@ export class CdkStack extends Stack {
       image: ecs.ContainerImage.fromEcrRepository(repo, "latest"),
       containerName: "integralsExecution",
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "electron-repulsion" }),
+      environment: {
+        "TASK_QUEUE": taskQueue.queueUrl,
+        "BATCH_TABLE": batchTable.tableName,
+      }
     });
 
-    /**
-     * STATE MACHINE
-     */
 
-    // Info step
-    const integralsInfoStep = cdkEcsRunTaskSfn("IntegralInfo");
+    const integralsInfoStep = this.submitEcsTask("integralsInfoStep", taskQueue);
 
     // Role for Lambda functions (includes S3 access)
     const setupLambdaRole = new iam.Role(this, "setupLambdaRole", {
@@ -238,7 +237,16 @@ export class CdkStack extends Stack {
     );
 
     // Creating LambdaInvoke steps for all Lambda functions
-    const setupTeiStep = cdkLambdaInvokeSfn("setupTeiStep", setupTeiLambda);
+    const setupTeiStep = new tasks.LambdaInvoke(this, "setupTeiStep", {
+      lambdaFunction: setupTeiLambda,
+      outputPath: "$",
+      payload: sfn.TaskInput.fromObject({
+        "payload.$": "$",
+        "task_token": sfn.JsonPath.taskToken,
+      }),
+      integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
+    })
+
     const setupCoreHamiltonianStep = cdkLambdaInvokeSfn("setupCoreHamiltonianStep", setupCalculationsLambda);
     const setupOverlapMatrixStep = cdkLambdaInvokeSfn("setupOverlapMatrixStep", setupCalculationsLambda);
     const setupInitialGuessStep = cdkLambdaInvokeSfn("setupInitialGuessStep", setupCalculationsLambda);
@@ -264,152 +272,32 @@ export class CdkStack extends Stack {
     });
 
     // Core Hamiltonian parallel step
-    const coreHamiltonianStep = cdkEcsRunTaskSfn("coreHamiltonianStep");
+    const coreHamiltonianStep = this.submitEcsTask("coreHamiltonianStep", taskQueue);
 
     // Overlap Matrix parallel step
-    const overlapMatrixStep = cdkEcsRunTaskSfn("overlapMatrixStep");
+    const overlapMatrixStep = this.submitEcsTask("overlapMatrixStep", taskQueue);
 
     // Initial Guess parallel step
-    const initialGuessStep = cdkEcsRunTaskSfn("initialGuessStep");
+    const initialGuessStep = this.submitEcsTask("initialGuessStep", taskQueue);
 
     // Sequential way to run two_electrons_integrals step
-    const integralsTwoElectronsIntegralsSeqStep = cdkEcsRunTaskSfn("IntegralsTEI");
+    const integralsTwoElectronsIntegralsSeqStep = this.submitEcsTask("IntegralsTEI", taskQueue);
 
     // Fock Matrix step
-    const fockMatrixStep = cdkEcsRunTaskSfn("fockMatrixStep");
+    const fockMatrixStep = this.submitEcsTask("fockMatrixStep", taskQueue);
 
     // Scf Step
-    const scfStep = cdkEcsRunTaskSfn("scfStep");
+    const scfStep = this.submitEcsTask("scfStep", taskQueue);
 
-    // AWS Batch way of running two_electrons_integrals step (including Batch setup)
-
-    // Role for the spot fleet
-    const spotFleetRole = new iam.Role(this, "spotFleetRole", {
-      roleName: "AmazonEC2SpotFleetRole",
-      assumedBy: new iam.ServicePrincipal("spotfleet.amazonaws.com"),
-      managedPolicies: [
-        ManagedPolicy.fromManagedPolicyArn(
-          this,
-          "sptFleetRole",
-          "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
-        ),
-      ],
-    });
-
-    // Role for each of the Batch instances (include S3 Full Access)
-    const batchInstanceRole = new iam.Role(this, "batchInstanceRole", {
-      assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
-      description: "Role for Batch Instances",
-      managedPolicies: [
-        ManagedPolicy.fromManagedPolicyArn(
-          this,
-          "ecsTaskPolicy2",
-          "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
-        ),
-        ManagedPolicy.fromManagedPolicyArn(this, "ecsBucketPolicy3", "arn:aws:iam::aws:policy/AmazonS3FullAccess"),
-      ],
-    });
-
-    const EcsInstanceProfile = new iam.CfnInstanceProfile(this, "ECSInstanceProfile", {
-      instanceProfileName: batchInstanceRole.roleName,
-      roles: [batchInstanceRole.roleName],
-    });
-
-    const batchServiceRole = new iam.Role(this, "batchServiceRole", {
-      roleName: "batchServiceRole",
-      assumedBy: new iam.ServicePrincipal("batch.amazonaws.com"),
-      managedPolicies: [
-        ManagedPolicy.fromManagedPolicyArn(
-          this,
-          "BatchServiceRole",
-          "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole"
-        ),
-      ],
-    });
-
-    // The compute environment for Batch - increase maxvCpus to increase the number of jobs that can be run parallelly
-    // For example, if incstances with 2 vCpus each are used and maxcCpus = 16, then only 8 instaces can be running parallelly
-    const batchComputeEnv = new batch.CfnComputeEnvironment(this, "computeEnv", {
-      computeEnvironmentName: "batch-compute-environment",
-      type: "MANAGED",
-      serviceRole: batchServiceRole.roleArn,
-      computeResources: {
-        type: "SPOT",
-        spotIamFleetRole: spotFleetRole.roleArn,
-        maxvCpus: 16,
-        minvCpus: 0,
-        instanceRole: EcsInstanceProfile.attrArn,
-        instanceTypes: ["optimal"],
-        subnets: [vpc.privateSubnets[0].subnetId],
-        securityGroupIds: [securityGroup.securityGroupId],
-      },
-    });
-
-    // The job queue for Batch
-    const batchJobQueue = new batch.CfnJobQueue(this, "jobQueue", {
-      priority: 10,
-      jobQueueName: "batchJobQueue",
-      computeEnvironmentOrder: [
-        {
-          computeEnvironment: batchComputeEnv.attrComputeEnvironmentArn,
-          order: 1,
-        },
-      ],
-    });
-
-    // Job defnition for Batch, uses the latest image in the ECR repository
-    // Change vcpus and memory to change resources available to each individual batch job
-    const batchJobDefinition = new batch.CfnJobDefinition(this, "jobDef", {
-      type: "container",
-      containerProperties: {
-        image: ecs.ContainerImage.fromEcrRepository(repo, "latest").imageName,
-        executionRoleArn: ecsTaskRole.roleArn,
-        vcpus: 1,
-        memory: 4096,
-      },
-      jobDefinitionName: "batch_job_definition",
-      platformCapabilities: ["EC2"],
-      retryStrategy: {
-        attempts: 2,
-      },
-    });
-
-    // BatchSubmitJob step for the step function
-    const batchSubmitJobTask = new tasks.BatchSubmitJob(this, "batchSubmitJobTask", {
-      jobDefinitionArn: `arn:aws:batch:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:job-definition/${batchJobDefinition.jobDefinitionName}`,
-      jobName: "tei_batch_job_submission",
-      jobQueueArn: batchJobQueue.attrJobQueueArn,
-      containerOverrides: {
-        command: sfn.JsonPath.listAt("$.commands"),
-        environment: {
-          JSON_OUTPUT_PATH: sfn.JsonPath.stringAt("$.s3_bucket_path"),
-          ARGS_PATH: sfn.JsonPath.stringAt("$.args_path"),
-        },
-      },
-      arraySize: sfn.JsonPath.numberAt("$.numSlices"),
-      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-    });
 
     const logGroup = new logs.LogGroup(this, "LogGroup");
 
-    // Step function condition to choose whether Batch step is used or the sequential step (ECS) for two_electrons_integrals
-    const batchCondition = sfn.Condition.and(
-      sfn.Condition.stringEquals("$.batch_execution", "true"),
-      sfn.Condition.numberGreaterThan("$.numSlices", 1)
-    );
 
     // Condition to determine whether the Fock-SCF loop will continue
     const loopCondition = sfn.Condition.and(
       sfn.Condition.numberLessThanEqualsJsonPath("$.loopData.loopCount", "$.max_iter"),
       sfn.Condition.numberGreaterThanJsonPath("$.loopData.hartree_diff", "$.epsilon")
     );
-
-    // Change this to change batch execution workflow
-    const batchExecWorkflow = new sfn.Choice(this, "batchExec")
-      // Batch execution
-      .when(batchCondition, batchSubmitJobTask)
-      // No Batch execution
-      .otherwise(integralsTwoElectronsIntegralsSeqStep);
 
     // Fock-SCF loop
     const fockScfLoop = new sfn.Choice(this, "Loop");
@@ -452,9 +340,7 @@ export class CdkStack extends Stack {
             modifyInputsInitialGuess
               .next(setupInitialGuessStep)
               .next(initialGuessStep))
-          .branch(
-            setupTeiStep
-              .next(batchExecWorkflow))
+          .branch(setupTeiStep)
       )
       .next(initializeLoopVariables)
       .next(fockScfLoop);
@@ -567,6 +453,18 @@ export class CdkStack extends Stack {
     new CfnOutput(this, "ecrRepoUri", {
       value: repo.repositoryUri,
       description: "ECR Repository for this stack, push Docker image here.",
+    });
+  }
+
+  private submitEcsTask(id: string, taskQueue: sqs.Queue) {
+    return new tasks.SqsSendMessage(this, id, {
+      queue: taskQueue,
+      messageBody: sfn.TaskInput.fromObject({
+        token: sfn.JsonPath.taskToken,
+        input: sfn.TaskInput.fromJsonPathAt('$'),
+      }),
+      outputPath: '$',
+      integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
     });
   }
 }

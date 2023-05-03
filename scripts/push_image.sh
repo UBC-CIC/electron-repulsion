@@ -25,3 +25,5 @@ set -x
 docker image tag integrals:latest ${REPO}
 
 docker push ${REPO}
+
+${AWS_CMD} ecs update-service --cluster Integrals-CDK-Cluster --service Integrals-Service --desired-count 1

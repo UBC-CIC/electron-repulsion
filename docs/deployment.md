@@ -74,7 +74,7 @@ cdk bootstrap
 
 # Deploy the current resources (potentially just updating changed resources, or doing nothing if up-to-date)
 # You need to pass required parameters at deploy time.
-cdk deploy --parameters CdkStack:bucketName=${YOUR_DESIRED_S3_BUCKET_TO_CREATE}
+cdk deploy --parameters IntegralsStack:bucketName=${YOUR_DESIRED_S3_BUCKET_TO_CREATE}
 ```
 
 As you pull new versions of our CDK code, you can `cdk synth` and `cdk deploy` at your convenience. If you want to tear down your environment, you can run `cdk destroy`. Note that you may have to delete the ECR image manually (or use `scripts/delete_image.sh`). Be warned that destroying the stack will remove the S3 bucket with calculation results!
