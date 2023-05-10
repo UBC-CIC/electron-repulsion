@@ -42,10 +42,12 @@ export class IntegralsStack extends Stack {
           ER_S3_BUCKET: bucketName.valueAsString,
           TASK_QUEUE: taskQueue.queueUrl,
           BATCH_TABLE: batchTable.tableName,
+          DELETED_JOB_TABLE: deletedJobTable.tableName,
         }
       });
       taskQueue.grantSendMessages(func);
       batchTable.grantWriteData(func);
+      deletedJobTable.grantWriteData(func);
       func.addPermission(`${name}permission`, {
         principal: new iam.ServicePrincipal("states.amazonaws.com"),
         action: "lambda:InvokeFunction",
@@ -116,6 +118,12 @@ export class IntegralsStack extends Stack {
     const batchTable = new dynamodb.Table(this, 'BatchTable', {
       partitionKey: { name: 'jobid', type: dynamodb.AttributeType.STRING },
       tableName: 'IntegralsBatchTable',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const deletedJobTable = new dynamodb.Table(this, 'deletedJobTable', {
+      partitionKey: { name: 'jobid', type: dynamodb.AttributeType.STRING },
+      tableName: 'IntegralsDeletedJobTable',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
@@ -206,6 +214,7 @@ export class IntegralsStack extends Stack {
       environment: {
         "TASK_QUEUE": taskQueue.queueUrl,
         "BATCH_TABLE": batchTable.tableName,
+        "DELETED_JOB_TABLE": deletedJobTable.tableName,
       }
     });
 
@@ -246,6 +255,13 @@ export class IntegralsStack extends Stack {
       "updateLoopVariablesLambda",
       "./lambda/updateLoopVariables/",
       "updateLoopVariables"
+    );
+
+    // Lambda function to put a job in the deleted jobs table
+    const deleteJobLambda = cdkLambdaFunction(
+      "deleteJobLambda",
+      "./lambda/deleteJob/",
+      "deleteJob"
     );
 
     // Creating LambdaInvoke steps for all Lambda functions
