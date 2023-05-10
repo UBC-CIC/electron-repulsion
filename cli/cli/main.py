@@ -101,10 +101,9 @@ def get_execution_list(bucket):
 
 @cli.command(help="Abort a running job")
 @click.option('--jobid', help="Id of the job to abort", required=True)
-@click.option('--bucket', help="Bucket for job metadata", required=True)
-def abort_execution(jobid, bucket):
+def abort_execution(jobid):
     click.echo("Getting resources...")
-    aws_resources = helpers.resolve_resource_config(bucket)
+    aws_resources = helpers.resolve_resource_config()
     helpers.abort_exec(jobid=jobid, aws_resources=aws_resources)
     print(f"Job {jobid} aborted!")
 
