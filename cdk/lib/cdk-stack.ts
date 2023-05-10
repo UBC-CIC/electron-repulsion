@@ -139,7 +139,8 @@ export class IntegralsStack extends Stack {
     // The ECS Cluster used to run ECS Fargate instances
     const cluster = new ecs.Cluster(this, "integralsCluster", {
       clusterName: "Integrals-CDK-Cluster",
-      vpc: vpc
+      vpc: vpc,
+      enableFargateCapacityProviders: true,
     });
 
     // Simple security group that allows all outbound traffic
@@ -184,6 +185,17 @@ export class IntegralsStack extends Stack {
       serviceName: "Integrals-Service",
       taskDefinition: ecsTask,
       desiredCount: 0,
+      capacityProviderStrategies: [
+        {
+          capacityProvider: "FARGATE_SPOT",
+          weight: 5,
+        },
+        {
+          capacityProvider: "FARGATE",
+          weight: 1,
+          base: 1,
+        }
+      ],
     });
 
     // Container definition for each task, uses the latest image in the ECR repository
