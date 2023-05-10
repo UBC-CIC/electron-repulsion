@@ -10,6 +10,7 @@ s3 = boto3.client('s3')
 sts = boto3.client('sts')
 ec2 = boto3.client('ec2')
 sfn = boto3.client('stepfunctions')
+lambda_client = boto3.client('lambda')
 
 
 # Class to keep track of AWS resources
@@ -21,9 +22,10 @@ class ResourceConfig:
     bucket_uri: str
     sfn_arn: str
     exec_arn: str
+    delete_job_lambda_arn: str
 
 
-def resolve_resource_config(bucket_name: str) -> ResourceConfig:
+def resolve_resource_config(bucket_name='') -> ResourceConfig:
     # Setting up ARNs and Ids of different resources used
     region = boto3.Session().region_name
     account_id = sts.get_caller_identity()['Account']
@@ -48,7 +50,8 @@ def resolve_resource_config(bucket_name: str) -> ResourceConfig:
         f"arn:aws:ecs:{region}:{account_id}:task-definition/IntegralsTaskDefinition",
         f's3://{bucket_name}/',
         f"arn:aws:states:{region}:{account_id}:stateMachine:IntegralsStateMachine",
-        f"arn:aws:states:{region}:{account_id}:execution:IntegralsStateMachine"
+        f"arn:aws:states:{region}:{account_id}:execution:IntegralsStateMachine",
+        f"arn:aws:lambda:{region}:{account_id}:function:deleteJob"
     )
 
 
@@ -134,8 +137,8 @@ def list_execs(aws_resources):
 
 # Abort state machine execution
 def abort_exec(jobid, aws_resources):
-    execution_arn = f"{aws_resources.exec_arn}:{jobid}"
-    sfn.stop_execution(executionArn=execution_arn)
+    lambda_arn = f"{aws_resources.delete_job_lambda_arn}"
+    lambda_client.invoke(FunctionName=lambda_arn, Payload=json.dumps({'jobid': jobid}))
 
 
 # Gets JSON from bucket at the location specified by key
