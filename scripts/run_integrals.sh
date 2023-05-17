@@ -8,6 +8,9 @@ do
 	then
 		sleep 1
 	else
+		task_id=`curl -s curl -s "$ECS_CONTAINER_METADATA_URI_V4/task" | jq -r ".TaskARN" | cut -d "/" -f 3`
+		aws ecs update-task-protection --cluster Integrals-CDK-Cluster --task $task_id --protection-enabled --expires-in-minutes 180
+
 		receipt=$(echo $message | jq -r ".ReceiptHandle")
 		body=$(echo $message | jq -r ".Body")
 		token=$(echo $body | jq -r ".token")
@@ -64,5 +67,6 @@ do
 				aws sqs delete-message --queue-url $TASK_QUEUE --receipt-handle $receipt
 			fi
 		fi
+		aws ecs update-task-protection --cluster Integrals-CDK-Cluster --task $task_id --no-protection-enabled
 	fi
 done
