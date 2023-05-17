@@ -14,6 +14,7 @@ import { Construct } from "constructs";
 import { ManagedPolicy } from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { BaseVpc } from "./base-vpc";
+import * as autoscaling from "aws-cdk-lib/aws-autoscaling";
 
 export class IntegralsStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -216,6 +217,24 @@ export class IntegralsStack extends Stack {
         }
       ],
     });
+
+    // Auto scaling policy for the ECS service
+    const scaling = ecsService.autoScaleTaskCount({
+      minCapacity: 1,
+      maxCapacity: 20,
+    });
+
+    // Scaling policy to scale up when Queue length is greater than 10
+    scaling.scaleOnMetric("QueueLengthScaling", {
+      metric: taskQueue.metricApproximateNumberOfMessagesVisible(),
+      adjustmentType: autoscaling.AdjustmentType.CHANGE_IN_CAPACITY,
+      scalingSteps: [
+        { upper: 10, change: -1 },
+        { lower: 30, change: +1 },
+        { lower: 100, change: +5 },
+      ],
+    });
+
 
     // Container definition for each task, uses the latest image in the ECR repository
     const containerDef = ecsTask.addContainer("container", {
