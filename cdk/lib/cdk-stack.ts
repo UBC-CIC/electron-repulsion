@@ -173,6 +173,17 @@ export class IntegralsStack extends Stack {
         ManagedPolicy.fromManagedPolicyArn(this, "ecsSQSPolicy", "arn:aws:iam::aws:policy/AmazonSQSFullAccess"),
         ManagedPolicy.fromManagedPolicyArn(this, "ecsDynamoDBPolicy", "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"),
       ],
+      inlinePolicies: {
+        ecsPolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: ["ecs:UpdateTaskProtection"],
+              resources: ["*"],
+              effect: iam.Effect.ALLOW,
+            }),
+          ],
+        }),
+      },
     });
 
     // Task definition for all ECS tasks. Change the cpu and memoryMiB to change the resource availability of each Fargate task
