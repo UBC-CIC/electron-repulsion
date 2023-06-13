@@ -15,6 +15,8 @@ Before you deploy, you must have the following in place:
 
 # Step 1: Clone The Repository
 
+> **Note:** To use this solution you need access to the [integrals repository](https://github.com/urysegal/integrals).
+
 1. Select a folder to hold the code in this repository, or create a new one.
 2. Open the terminal (or command prompt on Windows) and `cd` into the above folder.
 3. Clone this github repository by entering the following:
@@ -56,7 +58,7 @@ CDK determines the AWS environment it manipulates through all the normal means. 
 
 CDK groups deployable things in named "stacks." We have the following stacks (in dependency order):
 
-1. `CdkStack` - All resources, including S3 buckets, ECS clusters, Lambda and Step Function definitions, etc.
+1. `IntegralsStack` - All resources, including S3 buckets, ECS clusters, Lambda and Step Function definitions, etc.
 
 There are options in the `cdk` utility to operate per-stack, but by default it operates on all stacks.
 
