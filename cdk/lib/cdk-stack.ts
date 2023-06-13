@@ -145,6 +145,11 @@ export class IntegralsStack extends Stack {
       ]
     })
 
+    const vpcEndpoint = new ec2.GatewayVpcEndpoint(this, "vpcEndpoint", {
+      service: ec2.GatewayVpcEndpointAwsService.S3,
+      vpc: vpc,
+    });
+
     // The ECS Cluster used to run ECS Fargate instances
     const cluster = new ecs.Cluster(this, "integralsCluster", {
       clusterName: "Integrals-CDK-Cluster",
