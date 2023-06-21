@@ -157,6 +157,10 @@ export class IntegralsStack extends Stack {
       enableFargateCapacityProviders: true,
     });
 
+    cluster.addCapacity("DefaultAutoScalingGroupCapacity", {
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.C5N, ec2.InstanceSize.XLARGE2),
+    });
+
     // Simple security group that allows all outbound traffic
     const securityGroup = new ec2.SecurityGroup(this, "securityGroup", {
       allowAllOutbound: true,
@@ -207,7 +211,7 @@ export class IntegralsStack extends Stack {
 
     const ecsService = new ecs.FargateService(this, "ecsService", {
       cluster: cluster,
-      serviceName: "Integrals-Service",
+      serviceName: "Integrals-Fargate-Service",
       taskDefinition: ecsTask,
       desiredCount: 0,
       capacityProviderStrategies: [
@@ -218,14 +222,28 @@ export class IntegralsStack extends Stack {
         {
           capacityProvider: "FARGATE",
           weight: 1,
-          base: 1,
         }
       ],
     });
 
+
+    const ec2Task = new ecs.Ec2TaskDefinition(this, "ec2Task", {
+      networkMode: ecs.NetworkMode.AWS_VPC,
+      family: "IntegralsEc2TaskDefinition",
+      taskRole: ecsTaskRole,
+      executionRole: ecsTaskRole,
+    });
+
+    const ec2Service = new ecs.Ec2Service(this, "ec2Service", {
+      cluster: cluster,
+      serviceName: "Integrals-EC2-Service",
+      taskDefinition: ec2Task,
+      desiredCount: 0,
+    });
+
     // Auto scaling policy for the ECS service
     const scaling = ecsService.autoScaleTaskCount({
-      minCapacity: 1,
+      minCapacity: 0,
       maxCapacity: 20,
     });
 
@@ -242,7 +260,7 @@ export class IntegralsStack extends Stack {
 
 
     // Container definition for each task, uses the latest image in the ECR repository
-    const containerDef = ecsTask.addContainer("container", {
+    ecsTask.addContainer("container", {
       image: ecs.ContainerImage.fromEcrRepository(repo, "latest"),
       containerName: "integralsExecution",
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "electron-repulsion" }),
@@ -253,6 +271,17 @@ export class IntegralsStack extends Stack {
       }
     });
 
+    ec2Task.addContainer("container", {
+      image: ecs.ContainerImage.fromEcrRepository(repo, "latest"),
+      containerName: "integralsExecution",
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: "electron-repulsion" }),
+      environment: {
+        "TASK_QUEUE": taskQueue.queueUrl,
+        "BATCH_TABLE": batchTable.tableName,
+        "DELETED_JOB_TABLE": deletedJobTable.tableName,
+      },
+      memoryLimitMiB: 20480,
+    });
 
     const integralsInfoStep = this.submitEcsTask("integralsInfoStep", taskQueue);
 

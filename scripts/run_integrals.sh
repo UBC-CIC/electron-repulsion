@@ -1,5 +1,7 @@
 #!/bin/bash
-set -x
+set -ex
+
+export AWS_DEFAULT_REGION=ca-central-1
 
 while :
 do
