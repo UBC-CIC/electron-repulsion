@@ -179,16 +179,33 @@ export class IntegralsStack extends Stack {
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
         ),
         ManagedPolicy.fromManagedPolicyArn(this, "ecsBucketPolicy", "arn:aws:iam::aws:policy/AmazonS3FullAccess"),
-        ManagedPolicy.fromManagedPolicyArn(this, "ecsSFNPolicy", "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"),
-        ManagedPolicy.fromManagedPolicyArn(this, "ecsSQSPolicy", "arn:aws:iam::aws:policy/AmazonSQSFullAccess"),
-        ManagedPolicy.fromManagedPolicyArn(this, "ecsDynamoDBPolicy", "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"),
       ],
       inlinePolicies: {
         ecsPolicy: new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
               actions: ["ecs:UpdateTaskProtection"],
+              resources: [`arn:aws:ecs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:task/*/*`],
+              effect: iam.Effect.ALLOW,
+            }),
+            new iam.PolicyStatement({
+              actions: ["states:SendTaskSuccess", "states:SendTaskFailure"],
               resources: ["*"],
+              effect: iam.Effect.ALLOW,
+            }),
+            new iam.PolicyStatement({
+              actions: ["sqs:DeleteMessage", "sqs:ReceiveMessage"],
+              resources: [taskQueue.queueArn],
+              effect: iam.Effect.ALLOW,
+            }),
+            new iam.PolicyStatement({
+              actions: ["dynamodb:Query"],
+              resources: [deletedJobTable.tableArn],
+              effect: iam.Effect.ALLOW,
+            }),
+            new iam.PolicyStatement({
+              actions: ["dynamodb:DeleteItem", "dynamodb:UpdateItem"],
+              resources: [batchTable.tableArn],
               effect: iam.Effect.ALLOW,
             }),
           ],
