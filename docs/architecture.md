@@ -62,28 +62,28 @@ This function also pushes the integrals tasks in the queue (3) and waits for the
 
 #### Initialize loop variables (21)
 
-19. A loopData dictionary is added to the inputs. This dictionary keeps track of the number of iterations as well as the difference between the `hartree_fock_energy` calculated during the last two scf_step (28) calculations.
+21. A loopData dictionary is added to the inputs. This dictionary keeps track of the number of iterations as well as the difference between the `hartree_fock_energy` calculated during the last two scf_step (28) calculations.
 
 #### Loop condition (22)
 
-20. The loop terminates if the number of iterations have reached a specified limit (either as an input through the CLI or a default value) or the difference between the last two values of the `hartree_fock_energy` falls below a threshold value (either as an input through the CLI or a default value).
+22. The loop terminates if the number of iterations have reached a specified limit (either as an input through the CLI or a default value) or the difference between the last two values of the `hartree_fock_energy` falls below a threshold value (either as an input through the CLI or a default value).
 
 #### fock_matrix step (23,24,25)
 
-21. This “modify inputs” step adds `{ stepName: “fock_matrix” }` to the input and passes it to the next step to tell the following Lambda function which calculation to set up for.
-22. This step calls the setupCalculations Lambda function which sets up parameters to run the fock_matrix step.
-23. The next step pushes the fock_matrix task in the queue (3) which takes in parameters from the previous Lambda and the ‘integrals’ Docker image from the ECR repository. The standard output generated during the calculation is stored as a JSON file and the calculation result is stored as a binary file in the S3 bucket (5).
+23. This “modify inputs” step adds `{ stepName: “fock_matrix” }` to the input and passes it to the next step to tell the following Lambda function which calculation to set up for.
+24. This step calls the setupCalculations Lambda function which sets up parameters to run the fock_matrix step.
+25. The next step pushes the fock_matrix task in the queue (3) which takes in parameters from the previous Lambda and the ‘integrals’ Docker image from the ECR repository. The standard output generated during the calculation is stored as a JSON file and the calculation result is stored as a binary file in the S3 bucket (5).
 
 #### scf_step (26,27,28)
 
-24. This “modify inputs” step adds `{ stepName: “scf_step” }` to the input and passes it to the next step to tell the following Lambda function which calculation to set up for.
-25. This step calls the setupCalculations Lambda function which sets up parameters to run the scf_step.
-26. The next step pushes the scf_step task in the queue (3) which takes in parameters from the previous Lambda and the ‘integrals’ Docker image from the ECR repository. The scf_step is executed in this ECS container. The standard output generated during the calculation is stored as a JSON file and the calculation result is stored as a binary file in the S3 bucket (5).
+26. This “modify inputs” step adds `{ stepName: “scf_step” }` to the input and passes it to the next step to tell the following Lambda function which calculation to set up for.
+27. This step calls the setupCalculations Lambda function which sets up parameters to run the scf_step.
+28. The next step pushes the scf_step task in the queue (3) which takes in parameters from the previous Lambda and the ‘integrals’ Docker image from the ECR repository. The scf_step is executed in this ECS container. The standard output generated during the calculation is stored as a JSON file and the calculation result is stored as a binary file in the S3 bucket (5).
 
 #### Update loop variables (29)
 
-27. The loopData dictionary is updated. The number of iterations is increased by 1 and a new value of `hartree_diff`, which is the difference between the last two values of the `hartree_fock_energy`, is calculated.
+29. The loopData dictionary is updated. The number of iterations is increased by 1 and a new value of `hartree_diff`, which is the difference between the last two values of the `hartree_fock_energy`, is calculated.
  
 #### Success (30)
 
-28. If either one of the conditions are met (maximum number of iterations reached or minimum value of `hartree_diff` reached), the loop terminates and the step function execution is marked as successful.
+30. If either one of the conditions are met (maximum number of iterations reached or minimum value of `hartree_diff` reached), the loop terminates and the step function execution is marked as successful.
