@@ -15,6 +15,8 @@ Before you deploy, you must have the following in place:
 
 # Step 1: Clone The Repository
 
+> **Note:** To use this solution you need access to the [integrals repository](https://github.com/urysegal/integrals).
+
 1. Select a folder to hold the code in this repository, or create a new one.
 2. Open the terminal (or command prompt on Windows) and `cd` into the above folder.
 3. Clone this github repository by entering the following:
@@ -56,7 +58,7 @@ CDK determines the AWS environment it manipulates through all the normal means. 
 
 CDK groups deployable things in named "stacks." We have the following stacks (in dependency order):
 
-1. `CdkStack` - All resources, including S3 buckets, ECS clusters, Lambda and Step Function definitions, etc.
+1. `IntegralsStack` - All resources, including S3 buckets, ECS clusters, Lambda and Step Function definitions, etc.
 
 There are options in the `cdk` utility to operate per-stack, but by default it operates on all stacks.
 
@@ -74,7 +76,7 @@ cdk bootstrap
 
 # Deploy the current resources (potentially just updating changed resources, or doing nothing if up-to-date)
 # You need to pass required parameters at deploy time.
-cdk deploy --parameters CdkStack:bucketName=${YOUR_DESIRED_S3_BUCKET_TO_CREATE}
+cdk deploy --parameters IntegralsStack:bucketName=${YOUR_DESIRED_S3_BUCKET_TO_CREATE}
 ```
 
 As you pull new versions of our CDK code, you can `cdk synth` and `cdk deploy` at your convenience. If you want to tear down your environment, you can run `cdk destroy`. Note that you may have to delete the ECR image manually (or use `scripts/delete_image.sh`). Be warned that destroying the stack will remove the S3 bucket with calculation results!
